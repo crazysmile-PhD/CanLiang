@@ -7,6 +7,7 @@ import { Search, BarChart2, CalendarIcon, Github, X, TrendingUp, Clock, Package 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface InventoryData {
   item_count: Record<string, number>
@@ -35,6 +36,15 @@ interface StatModalData {
   loading: boolean
 }
 
+interface GroupStats {
+  group: string
+  last_run: string
+  avg_time: number
+  success: number
+  failure: number
+  artifacts: Record<string, number>
+}
+
 export default function InventoryPage() {
   const [dateList, setDateList] = useState<DateItem[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("") 
@@ -49,6 +59,9 @@ export default function InventoryPage() {
   const [itemTrendData, setItemTrendData] = useState<ItemTrendData | null>(null)
   const [loadingTrend, setLoadingTrend] = useState(false)
   const [statModal, setStatModal] = useState<StatModalData | null>(null)
+  const [stats, setStats] = useState<GroupStats[]>([])
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
 
   // 定义颜色方案
@@ -259,6 +272,32 @@ export default function InventoryPage() {
 
     fetchData()
   }, [selectedDate])
+
+  // 获取统计数据
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const days = 7
+        setStatsLoading(true)
+        const response = await fetch(`/api/stats?window=${days}`)
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const statsData = await response.json()
+        setStats(statsData.stats || [])
+        setStatsError(null)
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+        setStatsError('获取统计数据失败，请稍后再试')
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
 
   // 物品分类逻辑
   const getCategory = (name: string) => {
@@ -961,6 +1000,17 @@ const chartVariants = {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
               <TabsList className="mb-6 p-1 rounded-md" style={{ backgroundColor: colors.lightGray }}>
                 <TabsTrigger
+                  value="stats"
+                  className="data-[state=active]:text-white"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: colors.secondary,
+                    ["--tw-data-state-active-bg" as any]: colors.primary,
+                  }}
+                >
+                  统计
+                </TabsTrigger>
+                <TabsTrigger
                   value="all"
                   className="data-[state=active]:text-white"
                   style={{
@@ -990,6 +1040,44 @@ const chartVariants = {
 
             <div className="w-full">
               <AnimatePresence mode="wait">
+                <TabsContent value="stats">
+                  {statsLoading ? (
+                    <div className="text-center">统计数据加载中...</div>
+                  ) : statsError ? (
+                    <div className="text-center text-red-500">{statsError}</div>
+                  ) : stats.length === 0 ? (
+                    <div className="text-center">暂无统计数据</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>分组</TableHead>
+                          <TableHead>最后运行时间</TableHead>
+                          <TableHead>平均时间</TableHead>
+                          <TableHead>成功次数</TableHead>
+                          <TableHead>失败次数</TableHead>
+                          <TableHead>产物</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {stats.map((item) => (
+                          <TableRow key={item.group}>
+                            <TableCell>{item.group}</TableCell>
+                            <TableCell>{item.last_run}</TableCell>
+                            <TableCell>{item.avg_time}</TableCell>
+                            <TableCell>{item.success}</TableCell>
+                            <TableCell>{item.failure}</TableCell>
+                            <TableCell>
+                              {Object.entries(item.artifacts || {})
+                                .map(([name, count]) => `${name}: ${count}`)
+                                .join(", ")}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </TabsContent>
                 <TabsContent value="all">
                   <motion.div
                     key={`all-items-${animationKey}`}
