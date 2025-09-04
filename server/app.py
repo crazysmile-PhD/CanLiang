@@ -304,8 +304,62 @@ def analyse_single_log(date):
         'item_count': items,
         'duration': result['delta_time']
     }
-    
+
     return jsonify(response)
+
+
+@app.route('/api/total-items-trend', methods=['GET'])
+def total_items_trend():
+    """返回每日日志中的物品总数趋势。"""
+    trend = {}
+    for filename in sorted(os.listdir(BGI_LOG_DIR), reverse=True):
+        if not filename.endswith('.log'):
+            continue
+        date = filename.replace('better-genshin-impact', '').replace('.log', '')
+        file_path = os.path.join(BGI_LOG_DIR, filename)
+        result = read_log_file(file_path)
+        if "error" in result:
+            continue
+        items = filter_forbidden_items(result['item_count'])
+        trend[date] = sum(items.values())
+    return jsonify(trend)
+
+
+@app.route('/api/duration-trend', methods=['GET'])
+def duration_trend():
+    """返回每天的运行时长趋势。"""
+    trend = {}
+    for filename in sorted(os.listdir(BGI_LOG_DIR), reverse=True):
+        if not filename.endswith('.log'):
+            continue
+        date = filename.replace('better-genshin-impact', '').replace('.log', '')
+        file_path = os.path.join(BGI_LOG_DIR, filename)
+        result = read_log_file(file_path)
+        if "error" in result:
+            continue
+        trend[date] = result['delta_time']
+    return jsonify(trend)
+
+
+@app.route('/api/item-trend', methods=['GET'])
+def item_trend():
+    """返回指定物品随日期变化的数量。"""
+    item = request.args.get('item')
+    if not item:
+        return jsonify({'error': 'missing item parameter'}), 400
+
+    trend = {}
+    for filename in sorted(os.listdir(BGI_LOG_DIR), reverse=True):
+        if not filename.endswith('.log'):
+            continue
+        date = filename.replace('better-genshin-impact', '').replace('.log', '')
+        file_path = os.path.join(BGI_LOG_DIR, filename)
+        result = read_log_file(file_path)
+        if "error" in result:
+            continue
+        items = filter_forbidden_items(result['item_count'])
+        trend[date] = items.get(item, 0)
+    return jsonify(trend)
 
 
 # 启动Flask应用
