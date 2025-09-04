@@ -249,10 +249,10 @@ def get_log_list_api():
         JSON: 包含日志文件列表的JSON响应.例如：{'list': ['20250501']}
     """
     global log_list
-    if not log_list:
+    if log_list is None:
         log_list = get_log_list()
-    log_list.reverse()  # 最新的日志排在前面
-    return jsonify({'list': log_list})
+    # 返回倒序列表，但不修改全局 log_list 的顺序
+    return jsonify({'list': list(reversed(log_list))})
 
 
 @app.route('/api/analyse', methods=['GET'])
