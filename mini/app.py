@@ -2,9 +2,12 @@ import os
 import re
 from datetime import datetime
 from collections import defaultdict
+import atexit
+
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 import pandas as pd
+from reliable_writer import ReliableWriter
 # 加载环境变量
 load_dotenv()
 
@@ -13,6 +16,15 @@ BGI_LOG_DIR = os.path.join(os.getenv('BETTERGI_PATH'), 'log')
 
 # 创建Flask应用实例，设置静态文件夹路径为'static'
 app = Flask(__name__, static_folder='static')
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+event_writer = ReliableWriter(os.path.join(DATA_DIR, "events.log"))
+duration_writer = ReliableWriter(os.path.join(DATA_DIR, "duration.log"))
+
+atexit.register(event_writer.stop)
+atexit.register(duration_writer.stop)
 
 # ---------------------之后更新的内容粘贴到这里---------------------
 
@@ -220,6 +232,11 @@ def get_log_list():
     global duration_dataframe, item_dataframe
     duration_dataframe = pd.DataFrame(duration_dict)
     item_dataframe = pd.DataFrame(cached_dict)
+
+    for item, ts, date in zip(cached_dict['物品名称'], cached_dict['时间'], cached_dict['日期']):
+        event_writer.write({'item': item, 'time': ts, 'date': date})
+    for date, dur in zip(duration_dict['日期'], duration_dict['持续时间（秒）']):
+        duration_writer.write({'date': date, 'duration': dur})
     return filtered_logs
 
 

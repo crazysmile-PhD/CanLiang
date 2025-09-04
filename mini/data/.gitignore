@@ -1,0 +1,3 @@
+# Ignore generated logs and data files
+*
+!/.gitignore
