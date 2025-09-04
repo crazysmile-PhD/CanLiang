@@ -126,21 +126,20 @@ def parse_log(log_content, date_str):
                 # 表明是连续的事件，更新结束时间
                 current_end = current_time
             else:
-                # 表明是一段新的事件
+                # 表示与上一段存在较大间隔，需要先累加上一段时间
                 if delta <= 0:
                     logger.critical(
                         f"时间段错误,请检查。有关参数：{timestamp, details, date_str, current_start, current_end, delta}")
                 else:
-                    # 累加持续时间
-                    duration += int(delta)
+                    # 累加上一段持续时间
+                    duration += int((current_end - current_start).total_seconds())
                 # 开始新的时间段
                 current_start = current_time
                 current_end = current_time
 
     # 处理最后一段时间
-    if current_start and current_end and current_start != current_end:
-        delta = (current_end - current_start).total_seconds()
-        duration += int(delta)
+    if current_start and current_end:
+        duration += int((current_end - current_start).total_seconds())
 
     return {
         # 'type_count': type_count,
