@@ -249,9 +249,8 @@ def get_log_list_api():
         JSON: 包含日志文件列表的JSON响应.例如：{'list': ['20250501']}
     """
     global log_list
-    if not log_list:
-        log_list = get_log_list()
-    log_list.reverse()  # 最新的日志排在前面
+    if log_list is None:
+        log_list = sorted(get_log_list(), reverse=True)
     return jsonify({'list': log_list})
 
 
