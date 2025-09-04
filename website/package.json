@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "tsc utils/categoryRules.ts utils/getCategory.ts --outDir utils/dist --module commonjs --target ES2019 --esModuleInterop --skipLibCheck && node --test utils/getCategory.test.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
