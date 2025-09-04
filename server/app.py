@@ -96,7 +96,12 @@ def parse_log(log_content):
         
         # 提取拾取内容
         if '交互或拾取' in details:
-            item = details.split('：')[1].strip('"')
+            # 使用 partition 确保分隔符存在
+            _, sep, item_part = details.partition('：')
+            if not sep:
+                app.logger.warning(f"缺少分隔符的日志行：{details}")
+                continue
+            item = item_part.strip('"')
             interaction_items.append(item)
             item_count[item] = item_count.get(item, 0) + 1
         
