@@ -4,6 +4,7 @@ from datetime import datetime
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
+from server.events import emit_product
 
 # 加载环境变量
 load_dotenv()
@@ -64,7 +65,7 @@ def parse_duration(duration_str):
         return 0, 0
 
 
-def parse_log(log_content):
+def parse_log(log_content, config_group_id=None, run_id=None):
     """
     解析日志内容，提取日志类型、交互物品等信息，并统计相关信息。
     支持多次主窗体实例化/退出，自动计算所有段的总时长。
@@ -99,6 +100,7 @@ def parse_log(log_content):
             item = details.split('：')[1].strip('"')
             interaction_items.append(item)
             item_count[item] = item_count.get(item, 0) + 1
+            emit_product(config_group_id, run_id, item, 1)
         
         # 处理时间段
         elif '主窗体实例化' in details:
@@ -119,7 +121,7 @@ def parse_log(log_content):
     }
 
 
-def read_log_file(file_path):
+def read_log_file(file_path, config_group_id=None, run_id=None):
     """
     读取指定路径的日志文件并解析内容。
     
@@ -132,7 +134,7 @@ def read_log_file(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             log_content = file.read()
-        return parse_log(log_content)
+        return parse_log(log_content, config_group_id, run_id)
     except FileNotFoundError:
         return {"error": "文件未找到"}
     except Exception as e:
@@ -222,14 +224,16 @@ def analyse_log():
         JSON: 包含日志分析结果的JSON响应
     """
     date = request.args.get('date', 'all')
-    
+    config_group_id = request.args.get('configGroupId')
+    run_id = request.args.get('runId')
+
     if date == 'all':
-        return analyse_all_logs()
+        return analyse_all_logs(config_group_id, run_id)
     else:
-        return analyse_single_log(date)
+        return analyse_single_log(date, config_group_id, run_id)
 
 
-def analyse_all_logs():
+def analyse_all_logs(config_group_id=None, run_id=None):
     """
     分析所有日志文件并汇总结果
     
@@ -249,7 +253,7 @@ def analyse_all_logs():
             continue
             
         file_path = os.path.join(BGI_LOG_DIR, filename)
-        result = read_log_file(file_path)
+        result = read_log_file(file_path, config_group_id, run_id)
         
         if "error" in result:
             continue
@@ -281,7 +285,7 @@ def analyse_all_logs():
     return jsonify(total_response)
 
 
-def analyse_single_log(date):
+def analyse_single_log(date, config_group_id=None, run_id=None):
     """
     分析单个日志文件
     
@@ -292,7 +296,7 @@ def analyse_single_log(date):
         JSON: 包含单个日志分析结果的JSON响应
     """
     file_path = os.path.join(BGI_LOG_DIR, f"better-genshin-impact{date}.log")
-    result = read_log_file(file_path)
+    result = read_log_file(file_path, config_group_id, run_id)
     
     if "error" in result:
         return jsonify(result), 400
