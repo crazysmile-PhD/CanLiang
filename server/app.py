@@ -75,25 +75,40 @@ def parse_log(log_content):
     Returns:
         dict: 包含解析结果的字典
     """
-    log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'  
+    log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'
     matches = re.findall(log_pattern, log_content)
-    
+
     type_count = {}
     interaction_items = []
     item_count = {}
     duration = 0
-    
+
+    # 事件类型关键字映射，用于统计运行、错误、警告等事件数量
+    event_keywords = {
+        'run': [r'运行', r'启动', r'主窗体实例化'],
+        'error': [r'错误', r'异常', r'失败', r'ERROR'],
+        'warning': [r'警告', r'WARN']
+    }
+    event_count = {key: 0 for key in event_keywords}
+
     current_start = None  # 当前段开始时间
-    
+
     for match in matches:
         timestamp = match[0]  # 时间戳
         level = match[1]      # 日志级别
         log_type = match[2]   # 类名
         details = match[3].strip()  # 日志内容文本
-        
+
         # 类型统计
         type_count[log_type] = type_count.get(log_type, 0) + 1
-        
+
+        # 事件类型统计
+        log_text = f"{level} {log_type} {details}"
+        for event, patterns in event_keywords.items():
+            if any(re.search(pattern, log_text) for pattern in patterns):
+                event_count[event] += 1
+                break
+
         # 提取拾取内容
         if '交互或拾取' in details:
             item = details.split('：')[1].strip('"')
@@ -115,7 +130,8 @@ def parse_log(log_content):
         'interaction_items': interaction_items,
         'interaction_count': len(interaction_items),
         'item_count': item_count,
-        'delta_time': format_timedelta(duration)
+        'delta_time': format_timedelta(duration),
+        'event_count': event_count
     }
 
 
@@ -241,7 +257,8 @@ def analyse_all_logs():
     
     total_response = {
         "duration": "",
-        "item_count": defaultdict(int)  # 自动初始化新 key 为 0
+        "item_count": defaultdict(int),  # 自动初始化新 key 为 0
+        "event_count": defaultdict(int)
     }
     
     for filename in os.listdir(BGI_LOG_DIR):
@@ -259,12 +276,17 @@ def analyse_all_logs():
         
         sample_response = {
             'item_count': items,
-            'duration': result['delta_time']
+            'duration': result['delta_time'],
+            'event_count': result['event_count']
         }
         
         # 累加 item_count
         for key, value in sample_response["item_count"].items():
             total_response["item_count"][key] += value
+
+        # 累加 event_count
+        for key, value in sample_response["event_count"].items():
+            total_response["event_count"][key] += value
         
         # 累加 duration
         hours, minutes = parse_duration(sample_response["duration"])
@@ -277,7 +299,10 @@ def analyse_all_logs():
     
     # 设置总 duration 字符串
     total_response["duration"] = f"{total_hours}小时{total_minutes}分钟"
-    
+
+    total_response["item_count"] = dict(total_response["item_count"])
+    total_response["event_count"] = dict(total_response["event_count"])
+
     return jsonify(total_response)
 
 
@@ -302,9 +327,10 @@ def analyse_single_log(date):
     
     response = {
         'item_count': items,
-        'duration': result['delta_time']
+        'duration': result['delta_time'],
+        'event_count': result['event_count']
     }
-    
+
     return jsonify(response)
 
 
