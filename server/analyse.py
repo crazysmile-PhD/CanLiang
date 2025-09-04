@@ -1,7 +1,15 @@
+import logging
 import re
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s]: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 def parse_log(log_content):
+    logger.debug("Parsing log content")
     log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'
     matches = re.findall(log_pattern, log_content)
 
@@ -38,9 +46,9 @@ def read_log_file(file_path):
             log_content = file.read()
         return parse_log(log_content)
     except FileNotFoundError:
-        print("错误: 文件未找到!")
+        logger.error("错误: 文件未找到!")
     except Exception as e:
-        print(f"错误: 发生了一个未知错误: {e}")
+        logger.exception("错误: 发生了一个未知错误: %s", e)
     return None
 
 
