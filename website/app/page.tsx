@@ -1,12 +1,26 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Search, BarChart2, CalendarIcon, Github, X, TrendingUp, Clock, Package } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart"
+import {
+  Bar,
+  BarChart,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts"
 
 interface InventoryData {
   item_count: Record<string, number>
@@ -49,6 +63,9 @@ export default function InventoryPage() {
   const [itemTrendData, setItemTrendData] = useState<ItemTrendData | null>(null)
   const [loadingTrend, setLoadingTrend] = useState(false)
   const [statModal, setStatModal] = useState<StatModalData | null>(null)
+  const [graphType, setGraphType] = useState<"bar" | "line">("bar")
+  const [dimension, setDimension] = useState<"group" | "date">("group")
+  const [dateTotals, setDateTotals] = useState<{ name: string; count: number }[]>([])
 
 
   // 定义颜色方案
@@ -411,6 +428,28 @@ export default function InventoryPage() {
     let category = getCategory(name)
     return categoryColors[category as keyof typeof categoryColors]
   }
+  useEffect(() => {
+    if (dimension !== "date" || !dateList.length) return
+    const fetchTotals = async () => {
+      const totals = await Promise.all(
+        dateList.map(async (d) => {
+          try {
+            const res = await fetch(`/api/analyse?date=${d.value}`)
+            if (!res.ok) return { name: d.label, count: 0 }
+            const result = await res.json()
+            return {
+              name: d.label,
+              count: getTotalItemCount(result.item_count),
+            }
+          } catch {
+            return { name: d.label, count: 0 }
+          }
+        })
+      )
+      setDateTotals(totals)
+    }
+    fetchTotals()
+  }, [dimension, dateList])
  // 动画变体
  const containerVariants = {
   hidden: { opacity: 0 },
@@ -499,6 +538,12 @@ const chartVariants = {
   const top10Items = getTop5Items(data.item_count)
   const categoryTotals = getCategoryTotals(categories)
   const pieChartData = generatePieChart(categoryTotals)
+  const chartData = useMemo(() => {
+    if (dimension === "group") {
+      return categoryTotals.map((c) => ({ name: c.name, count: c.count }))
+    }
+    return dateTotals
+  }, [dimension, categoryTotals, dateTotals])
 
    // 新增：处理扇形区域悬停
   const handleSegmentHover = (index: number | null) => {
@@ -985,6 +1030,17 @@ const chartVariants = {
                     {category}
                   </TabsTrigger>
                 ))}
+                <TabsTrigger
+                  value="statistics"
+                  className="data-[state=active]:text-white"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: colors.secondary,
+                    ["--tw-data-state-active-bg" as any]: colors.primary,
+                  }}
+                >
+                  统计
+                </TabsTrigger>
               </TabsList>
             </motion.div>
 
@@ -1035,6 +1091,73 @@ const chartVariants = {
                     </motion.div>
                   </TabsContent>
                 ))}
+                <TabsContent value="statistics">
+                  <motion.div
+                    key={`statistics-${animationKey}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    <div className="flex justify-end gap-4 mb-4">
+                      <Select
+                        value={graphType}
+                        onValueChange={(v) => setGraphType(v as "bar" | "line")}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="图形类型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bar">柱状图</SelectItem>
+                          <SelectItem value="line">折线图</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={dimension}
+                        onValueChange={(v) => setDimension(v as "group" | "date")}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="维度" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="group">类别</SelectItem>
+                          <SelectItem value="date">日期</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <ChartContainer
+                      config={{ count: { label: "数量", color: colors.primary } }}
+                      className="h-[350px]"
+                    >
+                      {graphType === "bar" ? (
+                        <BarChart data={chartData}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Bar
+                            dataKey="count"
+                            fill="var(--color-count)"
+                            radius={[4, 4, 0, 0]}
+                          />
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                        </BarChart>
+                      ) : (
+                        <LineChart data={chartData}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Line
+                            dataKey="count"
+                            stroke="var(--color-count)"
+                            strokeWidth={2}
+                            dot
+                          />
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                        </LineChart>
+                      )}
+                    </ChartContainer>
+                  </motion.div>
+                </TabsContent>
               </AnimatePresence>
             </div>
           </Tabs>
