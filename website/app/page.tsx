@@ -7,6 +7,7 @@ import { Search, BarChart2, CalendarIcon, Github, X, TrendingUp, Clock, Package 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
+import { getCategory } from "@/utils/getCategory"
 
 interface InventoryData {
   item_count: Record<string, number>
@@ -260,49 +261,6 @@ export default function InventoryPage() {
     fetchData()
   }, [selectedDate])
 
-  // 物品分类逻辑
-  const getCategory = (name: string) => {
-    if (
-      name.includes("冒险家") ||
-      name.includes("游医") ||
-      name.includes("幸运儿") ||
-      name.includes("险家") ||
-      name.includes("医的") ||
-      name.includes("运儿") ||
-      name.includes("家") ||
-      (name.includes("的") &&
-        (name.includes("方巾") ||
-          name.includes("枭羽") ||
-          name.includes("怀钟") ||
-          name.includes("药壶") ||
-          name.includes("银莲") ||
-          name.includes("怀表") ||
-          name.includes("尾羽") ||
-          name.includes("头带") ||
-          name.includes("金杯") ||
-          name.includes("之花") ||
-          name.includes("之杯") ||
-          name.includes("沙漏") ||
-          name.includes("绿花") ||
-          name.includes("银冠") ||
-          name.includes("鹰羽")))
-    ) {
-      return "圣遗物"
-    } else if (['铁块', '白铁块', '水晶块', '魔晶块', '星银矿石', '紫晶块', '萃凝晶'].includes(name)) {
-      return "矿物"
-    } else if (
-      ['苹果', '蘑菇', '甜甜花', '胡萝卜', '白萝卜', '金鱼草', '薄荷',
-         '松果', '树莓', '松茸', '鸟蛋', '海草', '堇瓜', '墩墩桃',
-          '须弥蔷薇', '枣椰', '茉洁草', '沉玉仙茗', '颗粒果', '澄晶实',
-           '红果果菇', '小灯草', '嘟嘟莲', '莲蓬', '绝云椒椒', '清心',
-            '马尾', '琉璃袋', '竹笋', '绯樱绣球', '树王圣体菇', '帕蒂沙兰',
-             '青蜜莓'].includes(name)
-    ) {
-      return "食材"
-    } else {
-      return "其他"
-    }
-  }
 
   // 对物品进行分类
   const categorizeItems = (items: Record<string, number>) => {
