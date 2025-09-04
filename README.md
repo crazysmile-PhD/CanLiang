@@ -140,6 +140,21 @@ GET /api/analyse?date=YYYYMMDD
 2. 在Web界面上选择要分析的日志日期
 3. 查看分析结果，包括交互物品的统计信息
 
+## 示例数据导出
+
+项目提供 `generate_sample_stats.py` 用于生成示例的 CSV 与 JSON：
+
+```bash
+python generate_sample_stats.py
+```
+
+执行后会在项目根目录生成 `sample_stats.csv` 与 `sample_stats.json`：
+
+- CSV 使用 `csv` 模组写入，逗号分隔，编码为 **UTF-8 with BOM**，并保持欄位順序。
+- JSON 通过 `ensure_ascii=False` 输出，保留中文文字。
+
+可使用 Excel 或 LibreOffice 载入 `sample_stats.csv` 检查中文字与欄位是否正确显示。
+
 ## 故障排除
 
 - 如果无法自动检测BetterGI安装路径，请手动在`mini/.env`文件中设置
