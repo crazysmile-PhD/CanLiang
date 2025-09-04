@@ -55,10 +55,10 @@ def parse_duration(duration_str):
     Returns:
         tuple: (小时数, 分钟数)
     """
-    match = re.match(r"(\d+)小时(\d+)分钟", duration_str)
+    match = re.match(r"(?:(\d+)小时)?(?:(\d+)分钟)?", duration_str)
     if match:
-        hours = int(match.group(1))
-        minutes = int(match.group(2))
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
         return hours, minutes
     else:
         return 0, 0
