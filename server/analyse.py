@@ -1,7 +1,8 @@
 import re
+from server.events import emit_product
 
 
-def parse_log(log_content):
+def parse_log(log_content, config_group_id=None, run_id=None):
     log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'
     matches = re.findall(log_pattern, log_content)
 
@@ -24,6 +25,7 @@ def parse_log(log_content):
         if '交互或拾取' in details:
             item = details.split('：')[1].strip('"')
             interaction_items.append(item)
+            emit_product(config_group_id, run_id, item, 1)
 
     return {
         'type_count': type_count,
@@ -32,11 +34,11 @@ def parse_log(log_content):
     }
 
 
-def read_log_file(file_path):
+def read_log_file(file_path, config_group_id=None, run_id=None):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             log_content = file.read()
-        return parse_log(log_content)
+        return parse_log(log_content, config_group_id, run_id)
     except FileNotFoundError:
         print("错误: 文件未找到!")
     except Exception as e:
