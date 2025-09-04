@@ -7,6 +7,15 @@ import { Search, BarChart2, CalendarIcon, Github, X, TrendingUp, Clock, Package 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
+import {
+  getCategory,
+  categorizeItems,
+  getCategoryTotals,
+  generatePieChart,
+  getItemColor,
+  categoryColors,
+  type CategoryTotal,
+} from "@/lib/inventory"
 
 interface InventoryData {
   item_count: Record<string, number>
@@ -62,14 +71,6 @@ export default function InventoryPage() {
     lightGray: "#f5f5f5", // 浅灰色
     mediumGray: "#bdc3c7", // 中灰色
     darkText: "#003366", // 深色文字
-  }
-
-  // 定义类别颜色
-  const categoryColors = {
-    圣遗物: "#34495e", // 深蓝
-    矿物: "#4CAF50", // 绿色
-    食材: "#f39c12", // 橙色
-    其他: "#bdc3c7", // 浅灰
   }
 
   // 定义排行榜颜色
@@ -260,84 +261,6 @@ export default function InventoryPage() {
     fetchData()
   }, [selectedDate])
 
-  // 物品分类逻辑
-  const getCategory = (name: string) => {
-    if (
-      name.includes("冒险家") ||
-      name.includes("游医") ||
-      name.includes("幸运儿") ||
-      name.includes("险家") ||
-      name.includes("医的") ||
-      name.includes("运儿") ||
-      name.includes("家") ||
-      (name.includes("的") &&
-        (name.includes("方巾") ||
-          name.includes("枭羽") ||
-          name.includes("怀钟") ||
-          name.includes("药壶") ||
-          name.includes("银莲") ||
-          name.includes("怀表") ||
-          name.includes("尾羽") ||
-          name.includes("头带") ||
-          name.includes("金杯") ||
-          name.includes("之花") ||
-          name.includes("之杯") ||
-          name.includes("沙漏") ||
-          name.includes("绿花") ||
-          name.includes("银冠") ||
-          name.includes("鹰羽")))
-    ) {
-      return "圣遗物"
-    } else if (['铁块', '白铁块', '水晶块', '魔晶块', '星银矿石', '紫晶块', '萃凝晶'].includes(name)) {
-      return "矿物"
-    } else if (
-      ['苹果', '蘑菇', '甜甜花', '胡萝卜', '白萝卜', '金鱼草', '薄荷',
-         '松果', '树莓', '松茸', '鸟蛋', '海草', '堇瓜', '墩墩桃',
-          '须弥蔷薇', '枣椰', '茉洁草', '沉玉仙茗', '颗粒果', '澄晶实',
-           '红果果菇', '小灯草', '嘟嘟莲', '莲蓬', '绝云椒椒', '清心',
-            '马尾', '琉璃袋', '竹笋', '绯樱绣球', '树王圣体菇', '帕蒂沙兰',
-             '青蜜莓'].includes(name)
-    ) {
-      return "食材"
-    } else {
-      return "其他"
-    }
-  }
-
-  // 对物品进行分类
-  const categorizeItems = (items: Record<string, number>) => {
-    const categories: Record<string, Record<string, number>> = {
-      圣遗物: {},
-      矿物: {},
-      食材: {},
-      其他: {},
-    }
-
-    Object.entries(items).forEach(([name, count]) => {
-      let category = getCategory(name)
-      categories[category][name] = count
-    })
-
-    return categories
-  }
-
-    // 计算每个分类的总数量
-    const getCategoryTotals = (categories: Record<string, Record<string, number>>) => {
-  
-      const totals: CategoryTotal[] = []
-  
-      Object.entries(categories).forEach(([name, items]) => {
-        const count = Object.values(items).reduce((sum, count) => sum + count, 0)
-        totals.push({
-          name,
-          count,
-          color: categoryColors[name as keyof typeof categoryColors],
-        })
-      })
-  
-      return totals
-    }
-
   // 过滤和排序物品
   const getTop5Items = (items: Record<string, number>) => {
     return Object.entries(items)
@@ -362,55 +285,7 @@ export default function InventoryPage() {
     return Object.keys(items).length
   }
 
-  const generatePieChart = (data: CategoryTotal[]) => {
-    const total = data.reduce((sum, item) => sum + item.count, 0)
-
-    // 检查是否只有一个非 0 数据项
-    const nonZeroItems = data.filter(item => item.count > 0)
-    if (nonZeroItems.length === 1) {
-      const item = nonZeroItems[0]
-      return [{
-        isFullCircle: true,
-        color: item.color,
-        name: item.name,
-        count: item.count,
-        percentage: '100.0',
-        path: "", // 添加空路径属性以满足类型要求
-      }]
-    }
-
-    let currentAngle = 0
-
-    return data.map((item) => {
-      const percentage = item.count / total
-      const startAngle = currentAngle
-      const endAngle = currentAngle + percentage * 2 * Math.PI
-
-      const x1 = 100 + 80 * Math.cos(startAngle)
-      const y1 = 100 + 80 * Math.sin(startAngle)
-      const x2 = 100 + 80 * Math.cos(endAngle)
-      const y2 = 100 + 80 * Math.sin(endAngle)
-
-      const largeArcFlag = percentage > 0.5 ? 1 : 0
-
-      const path = `M 100 100 L ${x1} ${y1} A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
-
-      currentAngle = endAngle
-
-      return {
-        path,
-        color: item.color,
-        name: item.name,
-        count: item.count,
-        percentage: (percentage * 100).toFixed(1),
-      }
-    })
-  }
-
-  const getItemColor = (name: string) => {
-    let category = getCategory(name)
-    return categoryColors[category as keyof typeof categoryColors]
-  }
+  
  // 动画变体
  const containerVariants = {
   hidden: { opacity: 0 },
@@ -1044,7 +919,7 @@ const chartVariants = {
   )
 }
 
-function ItemCard({
+export function ItemCard({
   name,
   count,
   color,
@@ -1076,7 +951,7 @@ function ItemCard({
   )
 }
 
-function TrendChart({
+export function TrendChart({
   data,
   title,
   colors,
