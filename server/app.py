@@ -1,6 +1,7 @@
 import os
 import re
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
@@ -10,6 +11,9 @@ load_dotenv()
 
 # 获取日志目录路径
 BGI_LOG_DIR = os.path.join(os.getenv('BETTERGI_PATH'), 'log')
+# 调度器日志目录，可以通过环境变量覆盖
+SCHEDULER_LOG_DIR = os.getenv('SCHEDULER_LOG_DIR') or \
+    os.path.join(os.getenv('BETTERGI_PATH'), 'scheduler')
 
 # 创建Flask应用实例，设置静态文件夹路径为'static'
 app = Flask(__name__, static_folder='static')
@@ -189,6 +193,125 @@ def filter_forbidden_items(items):
     return filtered_items
 
 
+def parse_scheduler_line(line):
+    """Parse a single scheduler log line.
+
+    The parser is lenient and attempts to extract fields from either JSON
+    formatted lines or plain text lines with ``key=value`` pairs.
+
+    Returns a dictionary with ``group``, ``duration``, ``status`` and
+    ``artifacts`` (a dict) when those fields can be found.
+    """
+    try:
+        data = json.loads(line)
+    except Exception:
+        data = {}
+        group_match = re.search(r'group[:=]([\w-]+)', line)
+        if group_match:
+            data['group'] = group_match.group(1)
+
+        duration_match = re.search(r'duration[:=]([0-9.]+)', line)
+        if duration_match:
+            data['duration'] = float(duration_match.group(1))
+
+        status_match = re.search(r'status[:=](success|failure)', line)
+        if status_match:
+            data['status'] = status_match.group(1)
+
+        artifacts_match = re.search(r'artifacts[:=]({.*})', line)
+        if artifacts_match:
+            try:
+                data['artifacts'] = json.loads(artifacts_match.group(1))
+            except Exception:
+                parts = re.findall(r'(\w+):(\d+)', artifacts_match.group(1))
+                data['artifacts'] = {k: int(v) for k, v in parts}
+    else:
+        data.setdefault('artifacts', {})
+
+    return data
+
+
+def parse_scheduler_logs(window):
+    """Aggregate scheduler logs within a given time window."""
+    start_date = datetime.now().date() - timedelta(days=window - 1)
+    stats_per_group = {}
+
+    if not SCHEDULER_LOG_DIR or not os.path.isdir(SCHEDULER_LOG_DIR):
+        return []
+
+    for filename in sorted(os.listdir(SCHEDULER_LOG_DIR)):
+        # Extract date from filename (e.g., scheduler-20240520.log)
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename) or \
+            re.search(r'(\d{8})', filename)
+        if not date_match:
+            continue
+        date_str = date_match.group(1)
+        try:
+            if '-' in date_str:
+                file_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            else:
+                file_date = datetime.strptime(date_str, '%Y%m%d').date()
+        except ValueError:
+            continue
+        if file_date < start_date:
+            continue
+
+        path = os.path.join(SCHEDULER_LOG_DIR, filename)
+        try:
+            with open(path, 'r', encoding='utf-8') as fh:
+                for line in fh:
+                    data = parse_scheduler_line(line)
+                    group = data.get('group')
+                    if not group:
+                        continue
+                    duration = float(data.get('duration', 0))
+                    status = data.get('status')
+                    artifacts = data.get('artifacts', {})
+
+                    group_stats = stats_per_group.setdefault(
+                        group,
+                        {
+                            'group': group,
+                            'durations': [],
+                            'success_count': 0,
+                            'failure_count': 0,
+                            'artifacts': defaultdict(int),
+                            'last_duration': 0,
+                        },
+                    )
+
+                    group_stats['durations'].append(duration)
+                    group_stats['last_duration'] = duration
+                    if status == 'success':
+                        group_stats['success_count'] += 1
+                    elif status == 'failure':
+                        group_stats['failure_count'] += 1
+                    for a_type, count in artifacts.items():
+                        try:
+                            group_stats['artifacts'][a_type] += int(count)
+                        except Exception:
+                            pass
+        except FileNotFoundError:
+            continue
+
+    results = []
+    for data in stats_per_group.values():
+        durations = data['durations']
+        avg_duration = sum(durations) / len(durations) if durations else 0
+        results.append(
+            {
+                'group': data['group'],
+                'last_duration': data['last_duration'],
+                'avg_duration': avg_duration,
+                'success_count': data['success_count'],
+                'failure_count': data['failure_count'],
+                'artifacts': dict(data['artifacts']),
+            }
+        )
+
+    return results
+
+
 # 路由定义
 
 
@@ -211,6 +334,21 @@ def get_log_list_api():
     log_list = get_log_list()
     log_list.reverse()  # 最新的日志排在前面
     return jsonify({'list': log_list})
+
+
+@app.route('/api/stats', methods=['GET'])
+def scheduler_stats():
+    """Return aggregated scheduler statistics."""
+    window = request.args.get('window', '7')
+    try:
+        window = int(window)
+    except ValueError:
+        return jsonify({'error': 'invalid window'}), 400
+    if window not in (1, 7, 30):
+        return jsonify({'error': 'invalid window'}), 400
+
+    stats = parse_scheduler_logs(window)
+    return jsonify(stats)
 
 
 @app.route('/api/analyse', methods=['GET'])
