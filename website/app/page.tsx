@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search, BarChart2, CalendarIcon } from "lucide-react"
+import { Search, BarChart2, CalendarIcon, Clock, Package } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
@@ -131,7 +131,7 @@ export default function InventoryPage() {
   }, [])
 
   const handleSelectAll = () => {
-    setSelectedDate('all')  // 设定一个特殊值来表示“全部”
+    setSelectedDate("all")  // 设定一个特殊值来表示“全部”
   }
 
   // 获取物品数据
@@ -307,39 +307,6 @@ export default function InventoryPage() {
     })
   }
 
-  // 生成饼图SVG路径
-//   const generatePieChart = (data: CategoryTotal[]) => {
-//       const total = data.reduce((sum, item) => sum + item.count, 0)
-//       let currentAngle = 0
-  
-//       return data.map((item, index) => {
-//         const percentage = item.count / total
-//         const startAngle = currentAngle
-//         const endAngle = currentAngle + percentage * 2 * Math.PI
-  
-//         // 计算SVG路径
-//         const x1 = 100 + 80 * Math.cos(startAngle)
-//         const y1 = 100 + 80 * Math.sin(startAngle)
-//         const x2 = 100 + 80 * Math.cos(endAngle)
-//         const y2 = 100 + 80 * Math.sin(endAngle)
-  
-//         // 大弧标志 (large-arc-flag)
-//         const largeArcFlag = percentage > 0.5 ? 1 : 0
-  
-//         // 创建SVG路径
-//         const path = `M 100 100 L ${x1} ${y1} A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
-  
-//         currentAngle = endAngle
-  
-//         return {
-//           path,
-//           color: item.color,
-//           name: item.name,
-//           count: item.count,
-//           percentage: (percentage * 100).toFixed(1),
-//         }
-//       })
-//     }
       // 获取物品对应的颜色
   const getItemColor = (name: string) => {
     let category = getCategory(name)
@@ -465,7 +432,7 @@ const chartVariants = {
                   {totalItems}
                 </p>
               </div>
-              <BarChart2 className="h-8 w-8" style={{ color: colors.primary }} />
+              <Package className="h-8 w-8" style={{ color: colors.primary }} />
             </CardContent>
           </Card>
         </motion.div>
@@ -481,7 +448,7 @@ const chartVariants = {
                   {duration}
                 </p>
               </div>
-              <BarChart2 className="h-8 w-8" style={{ color: colors.primary }} />
+              <Clock className="h-8 w-8" style={{ color: colors.primary }} />
             </CardContent>
           </Card>
         </motion.div>
@@ -531,7 +498,7 @@ const chartVariants = {
                     >
                       <svg viewBox="0 0 200 200" className="w-full h-full">
                         {pieChartData.map((segment, index) => {
-                          if ('isFullCircle' in segment && segment.isFullCircle) {
+                          if ("isFullCircle" in segment && segment.isFullCircle) {
                             return (
                               <motion.circle
                                 key={index}
@@ -576,9 +543,9 @@ const chartVariants = {
                           key={index}
                           className="flex items-center"
                           style={{
-                            backgroundColor: hoverIndex === index ? '#f0f4ff' : 'transparent',
+                            backgroundColor: hoverIndex === index ? "#f0f4ff" : "transparent",
                             borderRadius: 6,
-                            padding: '4px 8px',
+                            padding: "4px 8px",
                           }}
                           onMouseEnter={() => handleSegmentHover(index)}
                           onMouseLeave={() => handleSegmentHover(null)}
@@ -705,8 +672,8 @@ const chartVariants = {
                 onClick={handleSelectAll}
                 className="px-4 py-2 rounded-md text-sm font-medium shadow-sm"
                 style={{
-                  backgroundColor: selectedDate === 'all' ? colors.primary : '#fff',
-                  color: selectedDate === 'all' ? '#fff' : colors.secondary,
+                  backgroundColor: selectedDate === "all" ? colors.primary : "#fff",
+                  color: selectedDate === "all" ? "#fff" : colors.secondary,
                   boxShadow: `0 0 0 1px ${colors.lightBorder}`,
                 }}
 
