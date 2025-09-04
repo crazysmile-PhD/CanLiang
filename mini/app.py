@@ -5,11 +5,21 @@ from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 import pandas as pd
+import logging
+
 # 加载环境变量
 load_dotenv()
 
-# 获取日志目录路径
-BGI_LOG_DIR = os.path.join(os.getenv('BETTERGI_PATH'), 'log')
+logger = logging.getLogger(__name__)
+
+# 读取并验证 BetterGI 路径
+bgi_path = os.getenv('BETTERGI_PATH')
+if not bgi_path or not os.path.exists(bgi_path):
+    logger.error('BETTERGI_PATH 未设置或路径不存在，请手动配置。当前值: %s', bgi_path)
+    raise RuntimeError('缺少 BETTERGI_PATH 环境变量，请手动配置。')
+
+# 获取日志目录路径（仅在校验通过后设置）
+BGI_LOG_DIR = os.path.join(bgi_path, 'log')
 
 # 创建Flask应用实例，设置静态文件夹路径为'static'
 app = Flask(__name__, static_folder='static')
