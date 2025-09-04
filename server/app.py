@@ -1,15 +1,21 @@
 import os
 import re
+import csv
+import io
+import json
 from datetime import datetime
 from collections import defaultdict
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from dotenv import load_dotenv
+from server.stats_service import StatsService
 
 # 加载环境变量
 load_dotenv()
 
 # 获取日志目录路径
 BGI_LOG_DIR = os.path.join(os.getenv('BETTERGI_PATH'), 'log')
+STATS_DATA_DIR = os.getenv('STATS_DATA_DIR', os.path.join(os.getcwd(), 'stats'))
+stats_service = StatsService(STATS_DATA_DIR)
 
 # 创建Flask应用实例，设置静态文件夹路径为'static'
 app = Flask(__name__, static_folder='static')
@@ -198,6 +204,58 @@ def serve_static(filename):
     提供静态资源的路由，返回指定的静态文件。
     """
     return send_from_directory('static', filename)
+
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """Return aggregated stats within a date range."""
+    start = request.args.get('from')
+    end = request.args.get('to')
+    if not start or not end:
+        return jsonify({'error': 'missing date range'}), 400
+    try:
+        start_date = datetime.strptime(start, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'invalid date format'}), 400
+    if start_date > end_date:
+        return jsonify({'error': 'invalid date range'}), 400
+    data = stats_service.load_range(start_date, end_date)
+    return jsonify({'data': data})
+
+
+@app.route('/api/stats/export', methods=['GET'])
+def export_stats():
+    """Export stats within a date range as CSV or JSON."""
+    fmt = request.args.get('format', 'json').lower()
+    start = request.args.get('from')
+    end = request.args.get('to')
+    if not start or not end:
+        return jsonify({'error': 'missing date range'}), 400
+    try:
+        start_date = datetime.strptime(start, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'invalid date format'}), 400
+    if start_date > end_date:
+        return jsonify({'error': 'invalid date range'}), 400
+    data = stats_service.load_range(start_date, end_date)
+    if fmt == 'json':
+        body = json.dumps(data, ensure_ascii=False)
+        resp = Response(body, mimetype='application/json')
+        resp.headers['Content-Disposition'] = 'attachment; filename=stats.json'
+        return resp
+    if fmt == 'csv':
+        output = io.StringIO()
+        fieldnames = sorted(data[0].keys()) if data else []
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in data:
+            writer.writerow(row)
+        resp = Response(output.getvalue(), mimetype='text/csv')
+        resp.headers['Content-Disposition'] = 'attachment; filename=stats.csv'
+        return resp
+    return jsonify({'error': 'invalid format'}), 400
 
 
 @app.route('/api/LogList', methods=['GET'])
