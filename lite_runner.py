@@ -399,7 +399,7 @@ def main() -> int:
         setup_signal_handlers()
 
         first_run = is_first_run()
-        first_run = True;
+        # first_run = True  # 保留注释以方便调试
 
         if first_run:
             logger.info("首次运行，将进行完整初始化...")
