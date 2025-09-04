@@ -1,12 +1,20 @@
 import os
 import re
+import logging
 from datetime import datetime
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 import pandas as pd
+
 # 加载环境变量
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s]: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # 获取日志目录路径
 BGI_LOG_DIR = os.path.join(os.getenv('BETTERGI_PATH'), 'log')
