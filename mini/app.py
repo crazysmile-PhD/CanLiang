@@ -223,6 +223,13 @@ def get_log_list():
     return filtered_logs
 
 
+def load_logs_if_needed():
+    """Load and cache log data if it has not been loaded yet."""
+    global log_list
+    if log_list is None or item_dataframe.empty or duration_dataframe.empty:
+        log_list = get_log_list()
+
+
 # 路由定义
 @app.route('/')
 def serve_index():
@@ -248,11 +255,8 @@ def get_log_list_api():
     Returns:
         JSON: 包含日志文件列表的JSON响应.例如：{'list': ['20250501']}
     """
-    global log_list
-    if not log_list:
-        log_list = get_log_list()
-    log_list.reverse()  # 最新的日志排在前面
-    return jsonify({'list': log_list})
+    load_logs_if_needed()
+    return jsonify({'list': list(reversed(log_list))})
 
 
 @app.route('/api/analyse', methods=['GET'])
@@ -267,6 +271,7 @@ def analyse_log():
         'item_count': {item_name:int}
     }
     """
+    load_logs_if_needed()
     date = request.args.get('date', 'all')
 
     if date == 'all':
@@ -285,6 +290,7 @@ def item_trend():
         'data': {‘date':int}
     }
     """
+    load_logs_if_needed()
     item_name = request.args.get('item', '')
     if item_name:
         return analyse_item_history(item_name)
@@ -301,6 +307,7 @@ def duration_trend():
         'data': {‘date':int}
     }
     """
+    load_logs_if_needed()
     return analyse_duration_history()
 
 
@@ -314,6 +321,7 @@ def item_history():
         'data': {‘date':int}
     }
     """
+    load_logs_if_needed()
     return analyse_all_items()
 
 
