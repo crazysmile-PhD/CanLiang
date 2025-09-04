@@ -233,6 +233,26 @@ export default function InventoryPage() {
     setSelectedDate('all')  // 设定一个特殊值来表示“全部”
   }
 
+  const handleExport = async (format: 'csv' | 'json') => {
+    const windowParam = selectedDate || 'all'
+    try {
+      const response = await fetch(`/api/stats/export?format=${format}&window=${windowParam}`)
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `stats_${windowParam}.${format}`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (error) {
+      console.error('导出失败:', error)
+    }
+  }
+
   // 获取物品数据
   useEffect(() => {
     const fetchData = async () => {
@@ -953,6 +973,32 @@ const chartVariants = {
               >
                 全部
               </button>
+
+              {/* 匯出按钮 */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleExport('csv')}
+                  className="px-4 py-2 rounded-md text-sm font-medium shadow-sm"
+                  style={{
+                    backgroundColor: colors.primary,
+                    color: '#fff',
+                    boxShadow: `0 0 0 1px ${colors.lightBorder}`,
+                  }}
+                >
+                  匯出CSV
+                </button>
+                <button
+                  onClick={() => handleExport('json')}
+                  className="px-4 py-2 rounded-md text-sm font-medium shadow-sm"
+                  style={{
+                    backgroundColor: colors.primary,
+                    color: '#fff',
+                    boxShadow: `0 0 0 1px ${colors.lightBorder}`,
+                  }}
+                >
+                  匯出JSON
+                </button>
+              </div>
             </div>
           </motion.div>
 
