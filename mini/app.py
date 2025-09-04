@@ -1,10 +1,14 @@
 import os
 import re
+import logging
 from datetime import datetime
 from collections import defaultdict
+
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 # 加载环境变量
 load_dotenv()
 
