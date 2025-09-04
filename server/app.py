@@ -79,7 +79,6 @@ def parse_log(log_content):
     matches = re.findall(log_pattern, log_content)
     
     type_count = {}
-    interaction_items = []
     item_count = {}
     duration = 0
     
@@ -97,7 +96,6 @@ def parse_log(log_content):
         # 提取拾取内容
         if '交互或拾取' in details:
             item = details.split('：')[1].strip('"')
-            interaction_items.append(item)
             item_count[item] = item_count.get(item, 0) + 1
         
         # 处理时间段
@@ -112,8 +110,8 @@ def parse_log(log_content):
     
     return {
         'type_count': type_count,
-        'interaction_items': interaction_items,
-        'interaction_count': len(interaction_items),
+        'interaction_count': sum(item_count.values()),
+        'item_list': list(item_count.keys()),
         'item_count': item_count,
         'delta_time': format_timedelta(duration)
     }
@@ -277,7 +275,10 @@ def analyse_all_logs():
     
     # 设置总 duration 字符串
     total_response["duration"] = f"{total_hours}小时{total_minutes}分钟"
-    
+    total_response["interaction_count"] = sum(total_response["item_count"].values())
+    total_response["item_list"] = list(total_response["item_count"].keys())
+    total_response["item_count"] = dict(total_response["item_count"])
+
     return jsonify(total_response)
 
 
@@ -302,6 +303,8 @@ def analyse_single_log(date):
     
     response = {
         'item_count': items,
+        'interaction_count': sum(items.values()),
+        'item_list': list(items.keys()),
         'duration': result['delta_time']
     }
     

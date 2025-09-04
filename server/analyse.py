@@ -6,7 +6,7 @@ def parse_log(log_content):
     matches = re.findall(log_pattern, log_content)
 
     type_count = {}
-    interaction_items = []
+    item_count = {}
 
     for match in matches:
         timestamp = match[0]
@@ -23,12 +23,13 @@ def parse_log(log_content):
         # 提取交互或拾取的物品
         if '交互或拾取' in details:
             item = details.split('：')[1].strip('"')
-            interaction_items.append(item)
+            item_count[item] = item_count.get(item, 0) + 1
 
     return {
         'type_count': type_count,
-        'interaction_items': interaction_items,
-        'interaction_count': len(interaction_items)
+        'item_count': item_count,
+        'interaction_count': sum(item_count.values()),
+        'item_list': list(item_count.keys())
     }
 
 
@@ -52,17 +53,9 @@ if __name__ == "__main__":
         for log_type, count in result['type_count'].items():
             print(f"{log_type}: {count} 次")
         print("\n交互或拾取的物品:")
-        print(result['interaction_items'])
+        print(result['item_list'])
         print(f"\n交互或拾取的物品总数: {result['interaction_count']} 个")
 
-        # 统计交互或拾取物品中每个字符串出现的次数
-        item_count = {}
-        for item in result['interaction_items']:
-            if item in item_count:
-                item_count[item] += 1
-            else:
-                item_count[item] = 1
-
         print("\n每个交互或拾取物品出现的次数:")
-        for item, count in item_count.items():
+        for item, count in result['item_count'].items():
             print(f"{item}: {count} 次")
