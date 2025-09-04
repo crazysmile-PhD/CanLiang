@@ -3,10 +3,13 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search, BarChart2, CalendarIcon, Github, X, TrendingUp, Clock, Package } from "lucide-react"
+import { Search, BarChart2, CalendarIcon, Github, X, Clock, Package } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion, AnimatePresence } from "framer-motion"
+import { ItemCard } from "@/components/ItemCard"
+import { TrendChart } from "@/components/TrendChart"
+import { CategoryTotal, getCategory, categorizeItems, getCategoryTotals, generatePieChart, categoryColors } from "@/lib/inventory"
 
 interface InventoryData {
   item_count: Record<string, number>
@@ -16,12 +19,6 @@ interface InventoryData {
 interface DateItem {
   value: string
   label: string
-}
-
-interface CategoryTotal {
-  name: string
-  count: number
-  color: string
 }
 
 interface ItemTrendData {
@@ -62,14 +59,6 @@ export default function InventoryPage() {
     lightGray: "#f5f5f5", // 浅灰色
     mediumGray: "#bdc3c7", // 中灰色
     darkText: "#003366", // 深色文字
-  }
-
-  // 定义类别颜色
-  const categoryColors = {
-    圣遗物: "#34495e", // 深蓝
-    矿物: "#4CAF50", // 绿色
-    食材: "#f39c12", // 橙色
-    其他: "#bdc3c7", // 浅灰
   }
 
   // 定义排行榜颜色
@@ -260,84 +249,6 @@ export default function InventoryPage() {
     fetchData()
   }, [selectedDate])
 
-  // 物品分类逻辑
-  const getCategory = (name: string) => {
-    if (
-      name.includes("冒险家") ||
-      name.includes("游医") ||
-      name.includes("幸运儿") ||
-      name.includes("险家") ||
-      name.includes("医的") ||
-      name.includes("运儿") ||
-      name.includes("家") ||
-      (name.includes("的") &&
-        (name.includes("方巾") ||
-          name.includes("枭羽") ||
-          name.includes("怀钟") ||
-          name.includes("药壶") ||
-          name.includes("银莲") ||
-          name.includes("怀表") ||
-          name.includes("尾羽") ||
-          name.includes("头带") ||
-          name.includes("金杯") ||
-          name.includes("之花") ||
-          name.includes("之杯") ||
-          name.includes("沙漏") ||
-          name.includes("绿花") ||
-          name.includes("银冠") ||
-          name.includes("鹰羽")))
-    ) {
-      return "圣遗物"
-    } else if (['铁块', '白铁块', '水晶块', '魔晶块', '星银矿石', '紫晶块', '萃凝晶'].includes(name)) {
-      return "矿物"
-    } else if (
-      ['苹果', '蘑菇', '甜甜花', '胡萝卜', '白萝卜', '金鱼草', '薄荷',
-         '松果', '树莓', '松茸', '鸟蛋', '海草', '堇瓜', '墩墩桃',
-          '须弥蔷薇', '枣椰', '茉洁草', '沉玉仙茗', '颗粒果', '澄晶实',
-           '红果果菇', '小灯草', '嘟嘟莲', '莲蓬', '绝云椒椒', '清心',
-            '马尾', '琉璃袋', '竹笋', '绯樱绣球', '树王圣体菇', '帕蒂沙兰',
-             '青蜜莓'].includes(name)
-    ) {
-      return "食材"
-    } else {
-      return "其他"
-    }
-  }
-
-  // 对物品进行分类
-  const categorizeItems = (items: Record<string, number>) => {
-    const categories: Record<string, Record<string, number>> = {
-      圣遗物: {},
-      矿物: {},
-      食材: {},
-      其他: {},
-    }
-
-    Object.entries(items).forEach(([name, count]) => {
-      let category = getCategory(name)
-      categories[category][name] = count
-    })
-
-    return categories
-  }
-
-    // 计算每个分类的总数量
-    const getCategoryTotals = (categories: Record<string, Record<string, number>>) => {
-  
-      const totals: CategoryTotal[] = []
-  
-      Object.entries(categories).forEach(([name, items]) => {
-        const count = Object.values(items).reduce((sum, count) => sum + count, 0)
-        totals.push({
-          name,
-          count,
-          color: categoryColors[name as keyof typeof categoryColors],
-        })
-      })
-  
-      return totals
-    }
-
   // 过滤和排序物品
   const getTop5Items = (items: Record<string, number>) => {
     return Object.entries(items)
@@ -360,51 +271,6 @@ export default function InventoryPage() {
   // 获取物品种类数量
   const getUniqueItemCount = (items: Record<string, number>) => {
     return Object.keys(items).length
-  }
-
-  const generatePieChart = (data: CategoryTotal[]) => {
-    const total = data.reduce((sum, item) => sum + item.count, 0)
-
-    // 检查是否只有一个非 0 数据项
-    const nonZeroItems = data.filter(item => item.count > 0)
-    if (nonZeroItems.length === 1) {
-      const item = nonZeroItems[0]
-      return [{
-        isFullCircle: true,
-        color: item.color,
-        name: item.name,
-        count: item.count,
-        percentage: '100.0',
-        path: "", // 添加空路径属性以满足类型要求
-      }]
-    }
-
-    let currentAngle = 0
-
-    return data.map((item) => {
-      const percentage = item.count / total
-      const startAngle = currentAngle
-      const endAngle = currentAngle + percentage * 2 * Math.PI
-
-      const x1 = 100 + 80 * Math.cos(startAngle)
-      const y1 = 100 + 80 * Math.sin(startAngle)
-      const x2 = 100 + 80 * Math.cos(endAngle)
-      const y2 = 100 + 80 * Math.sin(endAngle)
-
-      const largeArcFlag = percentage > 0.5 ? 1 : 0
-
-      const path = `M 100 100 L ${x1} ${y1} A 80 80 0 ${largeArcFlag} 1 ${x2} ${y2} Z`
-
-      currentAngle = endAngle
-
-      return {
-        path,
-        color: item.color,
-        name: item.name,
-        count: item.count,
-        percentage: (percentage * 100).toFixed(1),
-      }
-    })
   }
 
   const getItemColor = (name: string) => {
@@ -1044,230 +910,3 @@ const chartVariants = {
   )
 }
 
-function ItemCard({
-  name,
-  count,
-  color,
-  onClick,
-}: { name: string; count: number; color: string; onClick: () => void }) {
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-    >
-      <Card
-        className="border border-gray-100 hover:shadow-md transition-shadow duration-200 cursor-pointer"
-        onClick={onClick}
-      >
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="truncate font-medium">{name}</div>
-            <div
-              className="ml-2 rounded-full px-2 py-1 text-xs font-semibold text-white"
-              style={{ backgroundColor: color }}
-            >
-              {count}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  )
-}
-
-function TrendChart({
-  data,
-  title,
-  colors,
-  type,
-}: {
-  data: ItemTrendData
-  title: string
-  colors: any
-  type: "totalItems" | "duration" | "item"
-}) {
-  const sortedData = Object.entries(data).sort(([a], [b]) => a.localeCompare(b))
-  const maxValue = Math.max(...Object.values(data))
-  const minValue = Math.min(...Object.values(data))
-
-  const chartWidth = 600
-  const chartHeight = 300
-  const padding = 60
-  const innerWidth = chartWidth - 2 * padding
-  const innerHeight = chartHeight - 2 * padding
-
-  // 格式化数值显示
-  const formatValue = (value: number) => {
-    if (type === "duration") {
-      // 将分钟数转换为时间格式
-      const hours = Math.floor(value / 60)
-      const minutes = value % 60
-      return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`
-    }
-    return value.toString()
-  }
-
-  // 计算点的位置
-  const points = sortedData.map(([date, value], index) => {
-    const x = padding + (index / (sortedData.length - 1)) * innerWidth
-    const y = padding + ((maxValue - value) / (maxValue - minValue || 1)) * innerHeight
-    return { x, y, date, value }
-  })
-
-  // 生成路径字符串
-  const pathData = points.reduce((path, point, index) => {
-    const command = index === 0 ? "M" : "L"
-    return `${path} ${command} ${point.x} ${point.y}`
-  }, "")
-
-  // 生成渐变区域路径
-  const areaPath = `${pathData} L ${points[points.length - 1].x} ${padding + innerHeight} L ${padding} ${padding + innerHeight} Z`
-
-  // 获取图标
-  const getIcon = () => {
-    switch (type) {
-      case "totalItems":
-        return <Package className="h-5 w-5" style={{ color: colors.primary }} />
-      case "duration":
-        return <Clock className="h-5 w-5" style={{ color: colors.primary }} />
-      default:
-        return <TrendingUp className="h-5 w-5" style={{ color: colors.primary }} />
-    }
-  }
-
-  return (
-    <div className="w-full">
-      <div className="mb-4 flex items-center gap-2">
-        {getIcon()}
-        <span className="font-medium" style={{ color: colors.secondary }}>
-          {type === "totalItems" ? "总物品数量变化趋势" : type === "duration" ? "运行时间变化趋势" : "数量变化趋势"}
-        </span>
-      </div>
-
-      <div className="bg-gray-50 rounded-lg p-4">
-        <svg width="100%" height="300" viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="overflow-visible">
-          {/* 网格线 */}
-          <defs>
-            <pattern id="grid" width="40" height="30" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 30" fill="none" stroke="#e5e5e5" strokeWidth="1" />
-            </pattern>
-            <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor={colors.primary} stopOpacity="0.3" />
-              <stop offset="100%" stopColor={colors.primary} stopOpacity="0.05" />
-            </linearGradient>
-          </defs>
-
-          <rect x={padding} y={padding} width={innerWidth} height={innerHeight} fill="url(#grid)" />
-
-          {/* Y轴标签 */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const value = Math.round(minValue + (maxValue - minValue) * (1 - ratio))
-            const y = padding + ratio * innerHeight
-            return (
-              <g key={ratio}>
-                <line x1={padding - 5} y1={y} x2={padding} y2={y} stroke="#666" strokeWidth="1" />
-                <text x={padding - 10} y={y + 4} textAnchor="end" fontSize="12" fill="#666">
-                  {type === "duration" ? (value > 60 ? `${Math.floor(value / 60)}h` : `${value}m`) : value}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* 渐变区域 */}
-          <path d={areaPath} fill="url(#areaGradient)" />
-
-          {/* 折线 */}
-          <motion.path
-            d={pathData}
-            fill="none"
-            stroke={colors.primary}
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: 1.5, ease: "easeInOut" }}
-          />
-
-          {/* 数据点 */}
-          {points.map((point, index) => (
-            <motion.g key={index}>
-              <motion.circle
-                cx={point.x}
-                cy={point.y}
-                r="4"
-                fill="white"
-                stroke={colors.primary}
-                strokeWidth="3"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: index * 0.1 + 0.5, duration: 0.3 }}
-                whileHover={{ scale: 1.5 }}
-              />
-
-              {/* X轴标签 */}
-              <text
-                x={point.x}
-                y={padding + innerHeight + 20}
-                textAnchor="middle"
-                fontSize="11"
-                fill="#666"
-                transform={`rotate(-45, ${point.x}, ${padding + innerHeight + 20})`}
-              >
-                {point.date.slice(4)} {/* 只显示月-日 */}
-              </text>
-
-              {/* 悬停提示 */}
-              <motion.g opacity={0} whileHover={{ opacity: 1 }} transition={{ duration: 0.2 }}>
-                <rect x={point.x - 35} y={point.y - 35} width="70" height="25" fill="rgba(0,0,0,0.8)" rx="4" />
-                <text x={point.x} y={point.y - 18} textAnchor="middle" fontSize="12" fill="white">
-                  {formatValue(point.value)}
-                </text>
-              </motion.g>
-            </motion.g>
-          ))}
-
-          {/* 坐标轴 */}
-          <line x1={padding} y1={padding} x2={padding} y2={padding + innerHeight} stroke="#333" strokeWidth="2" />
-          <line
-            x1={padding}
-            y1={padding + innerHeight}
-            x2={padding + innerWidth}
-            y2={padding + innerHeight}
-            stroke="#333"
-            strokeWidth="2"
-          />
-        </svg>
-      </div>
-
-      {/* 统计信息 */}
-      <div className="mt-4 grid grid-cols-3 gap-4 text-center">
-        <div className="p-3 rounded-lg" style={{ backgroundColor: colors.light }}>
-          <div className="text-sm" style={{ color: colors.secondary }}>
-            最大值
-          </div>
-          <div className="text-xl font-bold" style={{ color: colors.darkText }}>
-            {formatValue(maxValue)}
-          </div>
-        </div>
-        <div className="p-3 rounded-lg" style={{ backgroundColor: colors.light }}>
-          <div className="text-sm" style={{ color: colors.secondary }}>
-            最小值
-          </div>
-          <div className="text-xl font-bold" style={{ color: colors.darkText }}>
-            {formatValue(minValue)}
-          </div>
-        </div>
-        <div className="p-3 rounded-lg" style={{ backgroundColor: colors.light }}>
-          <div className="text-sm" style={{ color: colors.secondary }}>
-            平均值
-          </div>
-          <div className="text-xl font-bold" style={{ color: colors.darkText }}>
-            {formatValue(Math.round(Object.values(data).reduce((a, b) => a + b, 0) / Object.values(data).length))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
