@@ -16,16 +16,16 @@ BetterGI日志分析工具初始化脚本
 """
 
 import os
-import sys
-import subprocess
-import platform
-import logging
-import signal
-import time
 import json
-from typing import Optional, Tuple, List, Dict, Any, Union
+import logging
+import platform
 import shutil
-import os
+import signal
+import subprocess
+import sys
+import time
+
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # 配置日志
 logging.basicConfig(
