@@ -1,15 +1,107 @@
 import os
 import re
+import subprocess
 from datetime import datetime
 from collections import defaultdict
+from typing import Optional
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 
-# 加载环境变量
+
+def _is_valid_path(path: Optional[str]) -> bool:
+    """判断路径是否为有效的 BetterGI 安装目录。"""
+    return bool(path) and os.path.isdir(path) and os.path.isdir(os.path.join(path, "log"))
+
+
+def detect_bettergi_path() -> Optional[str]:
+    """
+    自动探测 BetterGI 安装路径。
+
+    在 Windows 上通过注册表查找，在 Linux 上搜索常见目录或可执行文件。
+    成功返回路径，失败返回 ``None``。
+    """
+    if os.name == "nt":  # Windows
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            )
+            for i in range(winreg.QueryInfoKey(key)[0]):
+                try:
+                    subkey_name = winreg.EnumKey(key, i)
+                    subkey = winreg.OpenKey(key, subkey_name)
+                    try:
+                        display_name, _ = winreg.QueryValueEx(subkey, "DisplayName")
+                        if "BetterGI" in display_name:
+                            install_location, _ = winreg.QueryValueEx(
+                                subkey, "InstallLocation"
+                            )
+                            return install_location
+                    except FileNotFoundError:
+                        pass
+                    finally:
+                        winreg.CloseKey(subkey)
+                except OSError:
+                    continue
+            winreg.CloseKey(key)
+        except Exception:
+            pass
+    else:  # Linux / macOS
+        candidates = [
+            os.path.expanduser("~/.local/share/BetterGI"),
+            os.path.expanduser("~/BetterGI"),
+            "/usr/local/share/BetterGI",
+            "/usr/share/BetterGI",
+            "/opt/BetterGI",
+        ]
+        for path in candidates:
+            if _is_valid_path(path):
+                return path
+        try:
+            result = subprocess.run(
+                ["which", "BetterGI"], capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                possible = os.path.dirname(os.path.abspath(result.stdout.strip()))
+                if _is_valid_path(possible):
+                    return possible
+        except Exception:
+            pass
+    return None
+
+
+def get_bettergi_path() -> str:
+    """获取 BetterGI 安装路径，若环境变量缺失或无效则尝试自动探测。"""
+    env_path = os.getenv("BETTERGI_PATH")
+    if _is_valid_path(env_path):
+        return env_path
+
+    detected = detect_bettergi_path()
+    if not _is_valid_path(detected):
+        raise RuntimeError(
+            "环境变量 BETTERGI_PATH 缺失或无效，且自动检测失败，请手动配置。"
+        )
+
+    # 写入 .env 供后续使用
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
+    try:
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.write(f"BETTERGI_PATH={detected}\n")
+    except Exception:
+        pass
+
+    os.environ["BETTERGI_PATH"] = detected
+    return detected
+
+
+# 加载环境变量并获取路径
 load_dotenv()
+BETTERGI_PATH = get_bettergi_path()
 
 # 获取日志目录路径
-BGI_LOG_DIR = os.path.join(os.getenv('BETTERGI_PATH'), 'log')
+BGI_LOG_DIR = os.path.join(BETTERGI_PATH, "log")
 
 # 创建Flask应用实例，设置静态文件夹路径为'static'
 app = Flask(__name__, static_folder='static')
