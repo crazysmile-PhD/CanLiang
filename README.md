@@ -78,6 +78,27 @@ Analyse_bettergi_log/
     └── ...               # 前端相关文件
 ```
 
+## 前端使用说明
+
+前端源码位于 `website` 目录，基于 **Next.js** 和 **Tailwind CSS** 构建，并使用 **Recharts** 渲染趋势图表。
+
+### 安装依赖
+
+```bash
+cd website
+pnpm install
+```
+
+### 开发与构建
+
+```bash
+pnpm dev   # 启动开发服务器
+pnpm build # 生产环境构建
+pnpm lint  # 运行代码检查
+```
+
+运行后端接口后，访问 `pnpm dev` 提供的地址即可预览前端页面。
+
 ## API接口
 
 ### 获取日志列表
