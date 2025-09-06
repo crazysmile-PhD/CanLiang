@@ -1,5 +1,8 @@
 import os
 import re
+import json
+import csv
+import io
 from datetime import datetime
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
@@ -227,6 +230,44 @@ def analyse_log():
         return analyse_all_logs()
     else:
         return analyse_single_log(date)
+
+
+@app.route('/api/stats/export', methods=['GET'])
+def export_stats():
+    """导出统计数据为 CSV 或 JSON 文件"""
+    fmt = request.args.get('format', 'json').lower()
+    window = request.args.get('window', 'all')
+
+    data_resp = analyse_all_logs() if window == 'all' else analyse_single_log(window)
+
+    if isinstance(data_resp, tuple):
+        resp_obj, status_code = data_resp
+    else:
+        resp_obj, status_code = data_resp, data_resp.status_code
+
+    if status_code != 200:
+        return resp_obj, status_code
+
+    data = resp_obj.get_json()
+
+    if fmt == 'json':
+        output = json.dumps(data, ensure_ascii=False)
+        response = app.response_class(output, mimetype='application/json')
+        response.headers['Content-Disposition'] = f'attachment; filename="stats_{window}.json"'
+        return response
+    elif fmt == 'csv':
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        writer.writerow(['item', 'count'])
+        for item, count in data['item_count'].items():
+            writer.writerow([item, count])
+        writer.writerow([])
+        writer.writerow(['duration', data['duration']])
+        response = app.response_class(csv_buffer.getvalue(), mimetype='text/csv')
+        response.headers['Content-Disposition'] = f'attachment; filename="stats_{window}.csv"'
+        return response
+    else:
+        return jsonify({'error': 'Invalid format'}), 400
 
 
 def analyse_all_logs():
