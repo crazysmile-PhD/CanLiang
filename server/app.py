@@ -27,6 +27,27 @@ app = Flask(__name__, static_folder='static')
 FORBIDDEN_ITEMS = ['调查', '直接拾取']
 
 
+def detect_log_version(log_content):
+    """简单检测日志格式版本"""
+    new_pattern = re.compile(r"\[\d{2}:\d{2}:\d{2}\.\d{3}\]")
+    return 'new' if new_pattern.search(log_content) else 'old'
+
+
+def convert_legacy_log(log_content):
+    """尝试将旧日志格式转换为新格式"""
+    legacy_line = re.compile(r"(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\w+)\s+(\w+)\s+(.*)")
+    converted = []
+    for line in log_content.splitlines():
+        if not line.strip():
+            continue
+        match = legacy_line.match(line)
+        if not match:
+            raise ValueError('unconvertible')
+        timestamp, level, log_type, details = match.groups()
+        converted.append(f"[{timestamp}] [{level}] {log_type} {details}")
+    return "\n".join(converted)
+
+
 def format_timedelta(seconds):
     """
     将秒数转换为中文 x小时y分钟 格式
@@ -84,7 +105,14 @@ def parse_log(log_content):
     Returns:
         dict: 包含解析结果的字典
     """
-    log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'  
+    version = detect_log_version(log_content)
+    if version == 'old':
+        try:
+            log_content = convert_legacy_log(log_content)
+        except ValueError:
+            return {'status': 'legacy'}
+
+    log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'
     matches = re.findall(log_pattern, log_content)
     
     type_count = {}
@@ -164,8 +192,7 @@ def get_log_list():
     for file in log_files:
         file_path = os.path.join(BGI_LOG_DIR, f"better-genshin-impact{file}.log")
         result = read_log_file(file_path)
-        
-        if "error" in result:
+        if result.get('status') == 'legacy' or "error" in result:
             continue
             
         # 过滤掉不需要的物品
@@ -259,8 +286,7 @@ def analyse_all_logs():
             
         file_path = os.path.join(BGI_LOG_DIR, filename)
         result = read_log_file(file_path)
-        
-        if "error" in result:
+        if result.get('status') == 'legacy' or "error" in result:
             continue
             
         # 过滤物品
@@ -302,7 +328,8 @@ def analyse_single_log(date):
     """
     file_path = os.path.join(BGI_LOG_DIR, f"better-genshin-impact{date}.log")
     result = read_log_file(file_path)
-    
+    if result.get('status') == 'legacy':
+        return jsonify({'error': 'legacy log format'}), 400
     if "error" in result:
         return jsonify(result), 400
         

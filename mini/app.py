@@ -33,6 +33,27 @@ duration_dataframe = pd.DataFrame(columns=['日期', '持续时间（秒）'])
 log_list = None
 
 
+def detect_log_version(log_content):
+    """简单检测日志格式版本"""
+    new_pattern = re.compile(r"\[\d{2}:\d{2}:\d{2}\.\d{3}\]")
+    return 'new' if new_pattern.search(log_content) else 'old'
+
+
+def convert_legacy_log(log_content):
+    """尝试将旧日志格式转换为新格式"""
+    legacy_line = re.compile(r"(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\w+)\s+(\w+)\s+(.*)")
+    converted = []
+    for line in log_content.splitlines():
+        if not line.strip():
+            continue
+        match = legacy_line.match(line)
+        if not match:
+            raise ValueError('unconvertible')
+        timestamp, level, log_type, details = match.groups()
+        converted.append(f"[{timestamp}] [{level}] {log_type} {details}")
+    return "\n".join(converted)
+
+
 def format_timedelta(seconds):
     """
     将秒数转换为中文 x小时y分钟 格式
@@ -73,6 +94,13 @@ def parse_log(log_content, date_str):
         dict: 包含解析结果的字典
     """
     global item_dataframe, duration_dataframe
+    version = detect_log_version(log_content)
+    if version == 'old':
+        try:
+            log_content = convert_legacy_log(log_content)
+        except ValueError:
+            return {'status': 'legacy'}
+
     log_pattern = r'\[([^]]+)\] \[([^]]+)\] ([^\n]+)\n?([^\n[]*)'
     matches = re.findall(log_pattern, log_content)
 
@@ -208,8 +236,7 @@ def get_log_list():
     for file in log_files:
         file_path = os.path.join(BGI_LOG_DIR, f"better-genshin-impact{file}.log")
         result = read_log_file(file_path, file)
-
-        if "error" in result:
+        if result.get('status') == 'legacy' or "error" in result:
             continue
 
         # 过滤掉不需要的物品
