@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
@@ -108,6 +108,16 @@ def parse_log(log_content, date_str):
     # interaction_items = []
     item_count = {}
     duration = 0
+    last_timestamp = None
+    
+    def get_absolute_timestamp(ts):
+        nonlocal last_timestamp
+        candidate = datetime.strptime(ts, '%H:%M:%S.%f')
+        if last_timestamp and candidate < last_timestamp:
+            while candidate < last_timestamp:
+                candidate += timedelta(days=1)
+        last_timestamp = candidate
+        return candidate
     cache_dict = {
         '物品名称': [],
         '时间': [],
@@ -123,12 +133,11 @@ def parse_log(log_content, date_str):
         log_type = match[2]  # 类名
         details = match[3].strip()  # 日志内容文本
 
+        absolute_time = get_absolute_timestamp(timestamp)
+
         # 过滤禁用的关键词
         if any(keyword in details for keyword in FORBIDDEN_ITEMS):
             continue
-
-        # 转换时间戳
-        current_time = datetime.strptime(timestamp, '%H:%M:%S.%f')
 
         # 类型统计
         # type_count[log_type] = type_count.get(log_type, 0) + 1
@@ -160,14 +169,14 @@ def parse_log(log_content, date_str):
         # 处理时间段
         if not current_start:
             # 开始新的时间段
-            current_start = current_time
-            current_end = current_time
+            current_start = absolute_time
+            current_end = absolute_time
         else:
             # 计算与上一个有效时间的间隔
-            delta = (current_time - current_end).total_seconds()
+            delta = (absolute_time - current_end).total_seconds()
             if delta <= 300:
                 # 表明是连续的事件，更新结束时间
-                current_end = current_time
+                current_end = absolute_time
             else:
                 # 表示与上一段存在较大间隔，需要先累加上一段时间
                 if delta <= 0:
@@ -177,8 +186,8 @@ def parse_log(log_content, date_str):
                     # 累加上一段持续时间
                     duration += int((current_end - current_start).total_seconds())
                 # 开始新的时间段
-                current_start = current_time
-                current_end = current_time
+                current_start = absolute_time
+                current_end = absolute_time
 
     # 处理最后一段时间
     if current_start and current_end:

@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
@@ -121,16 +121,27 @@ def parse_log(log_content):
     duration = 0
     
     current_start = None  # 当前段开始时间
-    
+    last_timestamp = None  # 跟踪日志时间以处理跨天
+
+    def get_absolute_timestamp(ts):
+        nonlocal last_timestamp
+        candidate = datetime.strptime(ts, '%H:%M:%S.%f')
+        if last_timestamp and candidate < last_timestamp:
+            while candidate < last_timestamp:
+                candidate += timedelta(days=1)
+        last_timestamp = candidate
+        return candidate
+
     for match in matches:
         timestamp = match[0]  # 时间戳
         level = match[1]      # 日志级别
         log_type = match[2]   # 类名
         details = match[3].strip()  # 日志内容文本
-        
+        absolute_time = get_absolute_timestamp(timestamp)
+
         # 类型统计
         type_count[log_type] = type_count.get(log_type, 0) + 1
-        
+
         # 提取拾取内容
         if '交互或拾取' in details:
             # 使用 partition 确保分隔符存在
@@ -144,10 +155,10 @@ def parse_log(log_content):
         
         # 处理时间段
         elif '主窗体实例化' in details:
-            current_start = datetime.strptime(timestamp, '%H:%M:%S.%f')
-        
+            current_start = absolute_time
+
         elif ('主窗体退出' in details or '将执行 关机' in details) and current_start:
-            current_end = datetime.strptime(timestamp, '%H:%M:%S.%f')
+            current_end = absolute_time
             delta = (current_end - current_start).total_seconds()
             duration += int(delta)
             current_start = None  # 清除开始时间，准备下一段
