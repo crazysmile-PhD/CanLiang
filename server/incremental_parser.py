@@ -47,6 +47,7 @@ def flush_run(run_id: str, run_data: dict, end_time: datetime):
     run_data["duration"] = (end_time - run_data["start_dt"]).total_seconds()
     run_data["start"] = run_data["start_dt"].isoformat()
     del run_data["start_dt"]
+    run_data["products"] = dict(run_data.get("products", {}))
 
     with open(RUNS_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(run_data, ensure_ascii=False) + "\n")
@@ -77,7 +78,18 @@ def write_summary():
 
 def parse_logs():
     state = load_state()
+    state.setdefault("files", {})
     active_runs = {}
+
+    for run_id, run_state in state.get("active_runs", {}).items():
+        start_iso = run_state.get("start")
+        start_dt = datetime.fromisoformat(start_iso) if start_iso else None
+        active_runs[run_id] = {
+            "runId": run_state.get("runId", run_id),
+            "configGroup": run_state.get("configGroup"),
+            "start_dt": start_dt,
+            "products": defaultdict(int, run_state.get("products", {})),
+        }
 
     for filename in sorted(os.listdir(LOG_DIR)):
         if not filename.startswith("better-genshin-impact") or not filename.endswith(".log"):
@@ -117,6 +129,15 @@ def parse_logs():
                     continue
 
             state["files"][filename] = f.tell()
+
+    state["active_runs"] = {}
+    for run_id, run_data in active_runs.items():
+        state["active_runs"][run_id] = {
+            "runId": run_data["runId"],
+            "configGroup": run_data["configGroup"],
+            "start": run_data["start_dt"].isoformat() if run_data.get("start_dt") else None,
+            "products": dict(run_data.get("products", {})),
+        }
 
     save_state(state)
     write_summary()
