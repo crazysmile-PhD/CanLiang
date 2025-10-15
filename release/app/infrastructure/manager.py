@@ -82,7 +82,13 @@ class LogDataManager:
             timestamp = match[0]  # 时间戳
             # level = match[1]  # 日志级别
             # log_type = match[2]  # 类名
-            details = match[3].strip()  # 日志内容文本
+            raw_detail = match[2].strip()
+            details = raw_detail
+            if raw_detail.startswith('[') and '] ' in raw_detail:
+                details = raw_detail.split('] ', 1)[1]
+            if match[3]:  # 附加信息行
+                extra_detail = match[3].strip()
+                details = f"{details}\n{extra_detail}" if details else extra_detail
 
             # 过滤禁用的关键词
             if any(keyword in details for keyword in FORBIDDEN_ITEMS):

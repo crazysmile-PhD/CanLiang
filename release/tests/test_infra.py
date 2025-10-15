@@ -8,9 +8,10 @@ import os
 from unittest.mock import patch, MagicMock
 from app.infrastructure.db import LogDataManager
 from app.infrastructure.utils import (
-    parse_timestamp_to_seconds, 
+    parse_timestamp_to_seconds,
     check_dict_empty,
-    find_bettergi_install_path
+    find_bettergi_install_path,
+    open_browser_after_start,
 )
 
 
@@ -40,7 +41,7 @@ class TestUtils(unittest.TestCase):
         # 测试空字典
         empty_dict = {'a': [], 'b': [], 'c': []}
         self.assertTrue(check_dict_empty(empty_dict))
-        
+
         # 测试非空字典
         non_empty_dict = {'a': [1, 2], 'b': [3, 4], 'c': [5, 6]}
         self.assertFalse(check_dict_empty(non_empty_dict))
@@ -49,6 +50,26 @@ class TestUtils(unittest.TestCase):
         inconsistent_dict = {'a': [1, 2], 'b': [3], 'c': [4, 5, 6]}
         with self.assertRaises(Exception):
             check_dict_empty(inconsistent_dict)
+
+    @patch('app.infrastructure.utils.webbrowser.open')
+    @patch('app.infrastructure.utils.time.sleep', return_value=None)
+    def test_open_browser_after_start_uses_webbrowser(self, mock_sleep, mock_open):
+        """验证在当前平台下浏览器使用 webbrowser 打开，避免执行 Windows 专用命令。"""
+
+        def immediate_thread(target=None, args=(), kwargs=None, daemon=None):
+            class _ImmediateThread:
+                def start(self_inner):
+                    if target:
+                        kwargs_local = kwargs or {}
+                        target(*args, **kwargs_local)
+
+            return _ImmediateThread()
+
+        with patch('app.infrastructure.utils.threading.Thread', new=immediate_thread):
+            open_browser_after_start(port=4321, delay=0)
+
+        mock_sleep.assert_called_once_with(0)
+        mock_open.assert_called_once_with('http://127.0.0.1:4321/home', new=1)
     
     @patch('winreg.OpenKey')
     @patch('winreg.QueryInfoKey')

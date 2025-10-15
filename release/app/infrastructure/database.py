@@ -5,7 +5,7 @@ SQLite数据库操作模块
 import sqlite3
 import logging
 import os
-from typing import List, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from datetime import datetime, date
 from contextlib import contextmanager
 
@@ -282,7 +282,32 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"获取日志文件信息时发生错误: {e}")
             return None
-    
+
+    def get_database_stats(self) -> Dict[str, int]:
+        """返回日志文件与物品表的记录数量统计。"""
+
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT COUNT(*) FROM log_files')
+                log_files_row = cursor.fetchone()
+                log_files_count = log_files_row[0] if log_files_row else 0
+
+                cursor.execute('SELECT COUNT(*) FROM items')
+                items_row = cursor.fetchone()
+                items_count = items_row[0] if items_row else 0
+
+                return {
+                    'log_files_count': log_files_count,
+                    'items_count': items_count,
+                }
+        except Exception as e:
+            logger.error(f"获取数据库统计信息时发生错误: {e}")
+            return {
+                'log_files_count': 0,
+                'items_count': 0,
+            }
+
     def delete_log_data(self, date_str: str) -> bool:
         """
         删除指定日期的所有数据
@@ -355,6 +380,8 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"保存webhook数据时发生错误: {e}")
             return False
+
+
     
     def cleanup_old_webhook_data(self, days_to_keep: int = 3) -> bool:
         """
@@ -434,3 +461,83 @@ class DatabaseManager:
             logger.error(f"获取webhook数据时发生错误: {e}")
             return []
     
+
+class LogDatabase:
+    """为测试脚本提供的轻量包装器，复用 ``DatabaseManager`` 完成实际数据操作。"""
+
+    def __init__(self, db_path: str) -> None:
+        self._manager = DatabaseManager(db_path)
+
+    def store_log_data(
+        self,
+        date_str: str,
+        duration: int,
+        items: Iterable[Any],
+    ) -> bool:
+        serialized_items: List[Dict[str, Any]] = []
+        for item in items:
+            if item is None:
+                continue
+            if hasattr(item, "name"):
+                serialized_items.append(
+                    {
+                        "name": getattr(item, "name", ""),
+                        "timestamp": getattr(item, "timestamp", ""),
+                        "config_group": getattr(item, "config_group", None),
+                    }
+                )
+            elif isinstance(item, dict):
+                serialized_items.append(
+                    {
+                        "name": item.get("name", ""),
+                        "timestamp": item.get("timestamp", ""),
+                        "config_group": item.get("config_group"),
+                    }
+                )
+
+        return self._manager.insert_log_file_data(date_str, duration, serialized_items)
+
+    def is_date_stored(self, date_str: str) -> bool:
+        return date_str in self._manager.get_stored_dates()
+
+    def get_stored_dates(self) -> List[str]:
+        return self._manager.get_stored_dates()
+
+    def get_duration_data(self, exclude_today: bool = True) -> Dict[str, List[Any]]:
+        data = self._manager.get_duration_data(exclude_today=exclude_today)
+        dates = sorted(data.keys())
+        return {
+            "日期": dates,
+            "持续时间": [data[date] for date in dates],
+        }
+
+    def get_item_data(self, exclude_today: bool = True) -> Dict[str, List[Any]]:
+        grouped = self._manager.get_item_data(exclude_today=exclude_today)
+        names: List[str] = []
+        timestamps: List[str] = []
+        dates: List[str] = []
+        config_groups: List[str] = []
+
+        for date_str in sorted(grouped.keys()):
+            info = grouped[date_str]
+            items = info.get("物品名称", [])
+            times = info.get("时间", [])
+            groups = info.get("归属配置组", [])
+
+            names.extend(items)
+            timestamps.extend(times)
+            config_groups.extend(groups)
+            dates.extend([date_str] * len(items))
+
+        return {
+            "物品名称": names,
+            "时间": timestamps,
+            "日期": dates,
+            "归属配置组": config_groups,
+        }
+
+    def get_database_stats(self) -> Dict[str, int]:
+        return self._manager.get_database_stats()
+
+    def delete_log_data(self, date_str: str) -> bool:
+        return self._manager.delete_log_data(date_str)

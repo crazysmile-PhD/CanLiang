@@ -2,9 +2,12 @@
 视图模块
 路由映射：定义URL与处理函数的关联
 """
-from flask import Blueprint, jsonify, send_from_directory, request , redirect
-from app.api.controllers import LogController, WebhookController, StreamController, SystemInfoController
 import os
+import threading
+
+from flask import Blueprint, jsonify, send_from_directory, request , redirect
+
+from app.api.controllers import LogController, WebhookController, StreamController, SystemInfoController
 
 # 创建蓝图
 api_bp = Blueprint('api', __name__)
@@ -13,6 +16,89 @@ api_bp = Blueprint('api', __name__)
 log_controller = None
 webhook_controller = None
 stream_controller = None
+
+
+class StreamControllerManager:
+    """线程安全的StreamController单例管理器。"""
+
+    _instance: "StreamControllerManager | None" = None
+    _instance_lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self) -> None:
+        if hasattr(self, "_initialized"):
+            return
+        self._controllers: dict[str, StreamController] = {}
+        self._lock = threading.Lock()
+        self._initialized = True
+
+    def get_controller(self, target_app: str) -> StreamController:
+        with self._lock:
+            controller = self._controllers.get(target_app)
+            if controller is None:
+                controller = StreamController(target_app)
+                self._controllers[target_app] = controller
+            return controller
+
+    def stop_controller(self, target_app: str) -> bool:
+        with self._lock:
+            controller = self._controllers.pop(target_app, None)
+        if controller:
+            try:
+                controller.stop_stream()
+                controller._cleanup_resources()
+            except Exception:
+                pass
+            return True
+        return False
+
+    def cleanup_all(self) -> None:
+        with self._lock:
+            controllers = list(self._controllers.values())
+            self._controllers.clear()
+
+        for controller in controllers:
+            try:
+                controller.stop_stream()
+                controller._cleanup_resources()
+            except Exception:
+                pass
+
+    def get_programs_list(self) -> list[str]:
+        fallback = ["yuanshen.exe", "bettergi.exe", "桌面.exe"]
+        programs: list[str] = []
+        try:
+            controller = StreamController()
+            programs = controller.get_available_programs()
+        except Exception:
+            programs = []
+
+        result: list[str] = []
+        seen: set[str] = set()
+        for name in programs + fallback:
+            if name and name not in seen:
+                result.append(name)
+                seen.add(name)
+        return result
+
+
+stream_manager = StreamControllerManager()
+
+
+def reset_controllers() -> None:
+    """重置控制器的全局状态，便于测试隔离。"""
+
+    global log_controller, webhook_controller, stream_controller
+    log_controller = None
+    webhook_controller = None
+    stream_controller = None
+    stream_manager.cleanup_all()
 
 
 def init_controllers(log_dir: str):
@@ -293,20 +379,8 @@ def get_program_list():
         }
     """
     try:
-        # 创建临时的StreamController实例来获取程序列表
-        temp_controller = StreamController()
-        programs = temp_controller.get_available_programs()
+        programs = stream_manager.get_programs_list()
 
-        # 创建允许的程序列表
-        allowed_programs = [
-            'yuanshen.exe',
-            'bettergi.exe'
-        ]
-        programs = [program for program in programs if program in allowed_programs]
-
-        # 自定义的桌面映射
-        programs.append('桌面.exe')
-        
         return jsonify({
             'success': True,
             'data': programs,

@@ -41,7 +41,9 @@ def create_app(config_name='production'):
                 app.config[attr_name] = value
     
     # 注册蓝图
-    from app.api.views import api_bp
+    from app.api.views import api_bp, reset_controllers
+
+    reset_controllers()
     app.register_blueprint(api_bp)
-    
+
     return app

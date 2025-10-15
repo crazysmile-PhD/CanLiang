@@ -2,12 +2,32 @@
 工具类模块
 静态数据处理工具，包括find_bettergi_install_path和open_browser_after_start
 """
+import logging
 import os
 import subprocess
 import threading
 import time
-import logging
-from typing import Optional
+import webbrowser
+from typing import Callable, Optional
+
+try:  # Windows专用模块
+    import winreg  # type: ignore
+except ImportError:  # pragma: no cover - 在Linux测试环境下提供兼容占位
+    import sys
+    import types
+
+    winreg = types.ModuleType("winreg")  # type: ignore
+
+    def _not_supported(*args, **kwargs):  # pragma: no cover - 仅用于占位
+        raise NotImplementedError("winreg module is not available on this platform")
+
+    winreg.OpenKey = _not_supported  # type: ignore[attr-defined]
+    winreg.QueryInfoKey = _not_supported  # type: ignore[attr-defined]
+    winreg.EnumKey = _not_supported  # type: ignore[attr-defined]
+    winreg.QueryValueEx = _not_supported  # type: ignore[attr-defined]
+    winreg.CloseKey = lambda *args, **kwargs: None  # type: ignore[attr-defined]
+    winreg.HKEY_LOCAL_MACHINE = object()  # type: ignore[attr-defined]
+    sys.modules["winreg"] = winreg
 
 logger = logging.getLogger('BetterGI初始化')
 
@@ -57,7 +77,27 @@ def find_bettergi_install_path() -> Optional[str]:
     return None
 
 
-def open_browser_after_start(port: int = 3000):
+def _default_browser_opener(url: str) -> bool:
+    """Open ``url`` in a platform appropriate way."""
+
+    if os.name == "nt":
+        startfile = getattr(os, "startfile", None)
+        if startfile is not None:
+            try:
+                startfile(url)  # type: ignore[call-arg]
+                return True
+            except OSError:
+                logger.debug("os.startfile 打开 %s 失败，退回 webbrowser", url)
+
+    return webbrowser.open(url, new=1)
+
+
+def open_browser_after_start(
+    port: int = 3000,
+    *,
+    delay: float = 2.0,
+    opener: Optional[Callable[[str], object]] = None,
+) -> None:
     """
     在Flask应用启动后打开浏览器
     
@@ -65,24 +105,19 @@ def open_browser_after_start(port: int = 3000):
         port: 端口号，默认为3000
     """
 
-    def target():
+    def target() -> None:
         # 等待一段时间，确保Flask服务器完全启动
-        time.sleep(2)
-        url = f'http://127.0.0.1:{port}/home'
+        time.sleep(max(delay, 0))
+        url = f"http://127.0.0.1:{port}/home"
+        browser_opener = opener or _default_browser_opener
         try:
-            subprocess.run(['start', url], shell=True, check=True)
-            logger.info(f"成功启动浏览器并导航到 {url}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"启动浏览器时出现错误: {e}")
-        except Exception as e:
-            logger.error(f"启动浏览器时出现错误: {e}")
-            try:
-                subprocess.run(['start', url], check=True)
-            except Exception as e:
-                logger.error(f"启动浏览器时出现错误: {e}")
+            browser_opener(url)
+            logger.info("成功启动浏览器并导航到 %s", url)
+        except Exception as exc:  # pragma: no cover - 仅记录异常
+            logger.error("启动浏览器时出现错误: %s", exc)
 
     # 在新线程中执行浏览器打开操作，避免阻塞Flask应用的启动
-    threading.Thread(target=target).start()
+    threading.Thread(target=target, daemon=True).start()
 
 
 def parse_timestamp_to_seconds(timestamp: str) -> float:
