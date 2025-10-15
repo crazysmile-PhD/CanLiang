@@ -1,87 +1,107 @@
-"""
-API层测试模块
-测试API接口的功能
-"""
-import unittest
-import json
-from unittest.mock import patch, MagicMock
-from app import create_app
-from app.api.views import init_controllers
+import pytest
+
+from app.api.controllers import LogController, WebhookController
 
 
-class TestAPI(unittest.TestCase):
-    """
-    API测试类
-    """
-    
-    def setUp(self):
-        """
-        测试前的设置
-        """
-        self.app = create_app()
-        self.app.config['TESTING'] = True
-        self.client = self.app.test_client()
-        
-        # 模拟初始化控制器
-        with patch('app.api.views.LogController') as mock_controller:
-            init_controllers('/fake/log/dir')
-    
-    def test_serve_index(self):
-        """
-        测试首页路由
-        """
-        response = self.client.get('/')
-        self.assertEqual(response.status_code, 200)
-    
-    @patch('app.api.views.log_controller')
-    def test_get_log_list_api(self, mock_controller):
-        """
-        测试获取日志列表API
-        """
-        # 模拟控制器返回数据
-        mock_controller.get_log_list.return_value = {'list': ['20250101', '20250102']}
-        
-        response = self.client.get('/api/LogList')
-        self.assertEqual(response.status_code, 200)
-        
-        data = json.loads(response.data)
-        self.assertIn('list', data)
-        self.assertEqual(len(data['list']), 2)
-    
-    @patch('app.api.views.log_controller')
-    def test_analyse_log(self, mock_controller):
-        """
-        测试日志分析API
-        """
-        # 模拟控制器返回数据
-        mock_data = {
-            'duration': {'日期': ['20250101'], '持续时间': [3600]},
-            'item': {'物品名称': ['测试物品'], '时间': ['12:00:00'], '日期': ['20250101'], '归属配置组': ['测试组']}
-        }
-        mock_controller.get_log_data.return_value = mock_data
-        
-        response = self.client.get('/api/LogData')
-        self.assertEqual(response.status_code, 200)
-        
-        data = json.loads(response.data)
-        self.assertIn('duration', data)
-        self.assertIn('item', data)
-    
-    def test_controller_not_initialized(self):
-        """
-        测试控制器未初始化的情况
-        """
-        # 重新创建应用但不初始化控制器
-        app = create_app()
-        app.config['TESTING'] = True
-        client = app.test_client()
-        
-        response = client.get('/api/LogList')
-        self.assertEqual(response.status_code, 500)
-        
-        data = json.loads(response.data)
-        self.assertIn('error', data)
+class DummyLogManager:
+    def __init__(self, *_args, log_list=None, duration=None, items=None, **_kwargs):
+        self.log_list = list(log_list or [])
+        self.next_list = list(log_list or [])
+        self._duration = duration or {'日期': [], '持续时间': []}
+        self._items = items or {'物品名称': [], '时间': [], '日期': [], '归属配置组': []}
+        self.get_log_list_called = 0
+
+    def get_log_list(self):
+        self.get_log_list_called += 1
+        return list(self.next_list)
+
+    def get_duration_data(self):
+        return self._duration
+
+    def get_item_data(self):
+        return self._items
 
 
-if __name__ == '__main__':
-    unittest.main()
+class DummyDatabaseManager:
+    def __init__(self, *_args, **_kwargs):
+        self.saved_payloads = []
+        self.stored_data = []
+
+    def save_webhook_data(self, payload):
+        self.saved_payloads.append(payload)
+        return payload.get('event') == 'valid'
+
+    def get_webhook_data(self, limit):
+        return self.stored_data[:limit]
+
+
+@pytest.fixture(autouse=True)
+def patch_dependencies(monkeypatch):
+    monkeypatch.setattr('app.api.controllers.LogDataManager', DummyLogManager)
+    monkeypatch.setattr('app.api.controllers.DatabaseManager', DummyDatabaseManager)
+
+
+def test_log_controller_returns_reversed_list():
+    controller = LogController(log_dir='/tmp/logs')
+    controller.log_manager.log_list = ['20240102', '20240101']
+
+    result = controller.get_log_list()
+
+    assert result == {'list': ['20240101', '20240102']}
+    assert controller.log_manager.get_log_list_called == 0
+
+
+def test_log_controller_fetches_when_cache_missing():
+    controller = LogController(log_dir='/tmp/logs')
+    controller.log_manager.log_list = []
+    controller.log_manager.next_list = ['20240101', '20240102']
+
+    result = controller.get_log_list()
+
+    assert result['list'] == ['20240102', '20240101']
+    assert controller.log_manager.get_log_list_called == 1
+
+
+def test_log_controller_returns_cached_data_for_analysis():
+    controller = LogController(log_dir='/tmp/logs')
+    controller.log_manager.log_list = []
+    controller.log_manager._duration = {'日期': ['20240103'], '持续时间': [120]}
+    controller.log_manager._items = {'物品名称': ['测试'], '时间': ['10:00'], '日期': ['20240103'], '归属配置组': ['组1']}
+
+    result = controller.get_log_data()
+
+    assert result['duration']['持续时间'] == [120]
+    assert result['item']['物品名称'] == ['测试']
+
+
+def test_webhook_controller_save_data_success():
+    controller = WebhookController(log_dir='/tmp/logs')
+    payload = {'event': 'valid', 'result': 'ok'}
+
+    response = controller.save_data(payload)
+
+    assert response == {'success': True, 'message': '数据保存成功'}
+    assert controller.db_manager.saved_payloads == [payload]
+
+
+def test_webhook_controller_missing_event_returns_error():
+    controller = WebhookController(log_dir='/tmp/logs')
+
+    response = controller.save_data({'result': 'missing'})
+
+    assert response['success'] is False
+    assert 'event' in response['message']
+
+
+def test_webhook_controller_handles_save_failure(monkeypatch):
+    controller = WebhookController(log_dir='/tmp/logs')
+
+    def fail_save(_payload):
+        raise RuntimeError('db down')
+
+    monkeypatch.setattr(controller.db_manager, 'save_webhook_data', fail_save)
+
+    response = controller.save_data({'event': 'valid'})
+
+    assert response['success'] is False
+    assert '服务器内部错误' in response['message']
