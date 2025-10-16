@@ -14,6 +14,12 @@ from app.api.controllers import (
     SystemInfoController,
     PreviewModeError,
 )
+from app.api.preview import (
+    DEFAULT_PREVIEW_MODE,
+    normalize_preview_mode,
+    preview_mode_is_disabled,
+    preview_mode_requires_external_client,
+)
 
 # 创建蓝图
 api_bp = Blueprint('api', __name__)
@@ -42,10 +48,11 @@ class StreamControllerManager:
             return
         self._controllers: dict[str, StreamController] = {}
         self._lock = threading.Lock()
-        self._preview_mode = "none"
+        self._preview_mode = DEFAULT_PREVIEW_MODE
         self._initialized = True
 
     def set_preview_mode(self, mode: str) -> None:
+        mode = normalize_preview_mode(mode)
         with self._lock:
             if mode == self._preview_mode:
                 return
@@ -54,7 +61,7 @@ class StreamControllerManager:
         for controller in controllers:
             try:
                 controller.stop_stream()
-                controller.preview_mode = mode
+                controller.set_preview_mode(mode)
             except Exception:
                 pass
 
@@ -69,7 +76,7 @@ class StreamControllerManager:
                 controller = StreamController(target_app, preview_mode=self._preview_mode)
                 self._controllers[target_app] = controller
             else:
-                controller.preview_mode = self._preview_mode
+                controller.set_preview_mode(self._preview_mode)
             return controller
 
     def stop_controller(self, target_app: str) -> bool:
@@ -100,7 +107,7 @@ class StreamControllerManager:
         fallback = ["yuanshen.exe", "bettergi.exe", "桌面.exe"]
         programs: list[str] = []
         try:
-            controller = StreamController()
+            controller = StreamController(preview_mode=DEFAULT_PREVIEW_MODE)
             programs = controller.get_available_programs()
         except Exception:
             programs = []
@@ -125,10 +132,10 @@ def reset_controllers() -> None:
     webhook_controller = None
     stream_controller = None
     stream_manager.cleanup_all()
-    stream_manager.set_preview_mode("none")
+    stream_manager.set_preview_mode(DEFAULT_PREVIEW_MODE)
 
 
-def init_controllers(log_dir: str, preview_mode: str = "none"):
+def init_controllers(log_dir: str, preview_mode: str = DEFAULT_PREVIEW_MODE):
     """
     初始化控制器
     
@@ -306,14 +313,14 @@ def video_stream():
     
     try:
         preview_mode = stream_manager.get_preview_mode()
-        if preview_mode == "none":
+        if preview_mode_is_disabled(preview_mode):
             return jsonify({
                 'error': '实时预览已关闭',
                 'message': '使用 --preview-mode 启用需要的推流方案',
                 'preview_mode': preview_mode,
             }), 503
 
-        if preview_mode == "sunshine":
+        if preview_mode_requires_external_client(preview_mode):
             return jsonify({
                 'error': 'Sunshine 模式不提供浏览器内预览',
                 'message': '请通过 Sunshine 客户端或同网段监看工具连接',

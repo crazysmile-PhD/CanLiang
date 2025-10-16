@@ -28,6 +28,7 @@ import sys
 import argparse
 import logging
 from app import create_app
+from app.api.preview import PreviewMode, DEFAULT_PREVIEW_MODE
 from app.api.views import init_controllers
 from app.infrastructure.utils import find_bettergi_install_path, open_browser_after_start
 from config import Config
@@ -52,8 +53,8 @@ def parse_arguments():
                        help='SSL证书文件路径，格式为"cert.pem,key.pem"或单个.pem文件路径')
     parser.add_argument(
         '--preview-mode',
-        default='none',
-        choices=['none', 'web-rtc', 'll-hls', 'sunshine'],
+        default=DEFAULT_PREVIEW_MODE,
+        choices=PreviewMode.choices(),
         help='实时预览方案，默认关闭。',
     )
     parser.add_argument(
