@@ -45,11 +45,17 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(description='参量质变仪，用于解析BetterGI日志。')
     parser.add_argument('-bgi', '--bgi_path', default=None, help='BetterGI程序路径')
-    parser.add_argument('-env', '--environment', default='production', 
+    parser.add_argument('-env', '--environment', default='production',
                        choices=['development', 'production', 'testing'],
                        help='运行环境 (development/production/testing)，默认为production')
-    parser.add_argument('-ssl', '--ssl_cert', default=None, 
+    parser.add_argument('-ssl', '--ssl_cert', default=None,
                        help='SSL证书文件路径，格式为"cert.pem,key.pem"或单个.pem文件路径')
+    parser.add_argument(
+        '--preview-mode',
+        default='none',
+        choices=['none', 'web-rtc', 'll-hls', 'sunshine'],
+        help='配置推流预览模式 (none/web-rtc/ll-hls/sunshine)，默认为none',
+    )
     # parser.add_argument('-no', '--do_not_open_website', action='store_true', 
     #                    help='默认启动时打开网页，传递此参数以禁用')
     return parser.parse_args()
@@ -155,7 +161,10 @@ def main():
         port = config_instance.PORT
         
         # 初始化控制器（不再需要target_app参数）
-        init_controllers(bgi_log_dir)
+        init_controllers(bgi_log_dir, preview_mode=args.preview_mode)
+
+        # 将预览模式写入应用配置，便于其他组件读取
+        app.config['PREVIEW_MODE'] = args.preview_mode
         
         # 如果不禁用，则启动浏览器
         # if not args.do_not_open_website:
