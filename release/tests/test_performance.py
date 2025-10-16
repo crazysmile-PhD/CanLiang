@@ -8,7 +8,10 @@ import time
 import gc
 import psutil
 import os
+import numpy as np
+
 from app.api.controllers import StreamController
+from app.streaming.preview import SunshinePreviewEngine, run_sunshine_soak_test
 
 def test_desktop_capture_performance():
     """测试桌面捕获性能"""
@@ -180,6 +183,41 @@ def test_encoding_performance():
     print(f"平均编码大小: {avg_size/1024:.1f} KB")
     
     sc._cleanup_resources()
+
+
+def test_sunshine_preview_rebuilds_on_resolution_change():
+    """Sunshine 预览在分辨率变化时仅重建一次缓冲。"""
+
+    engine = SunshinePreviewEngine(sample_interval=0.01)
+    base_frame = np.zeros((12, 12, 3), dtype=np.uint8)
+
+    engine.handle_frame(base_frame, timestamp=0.0)
+    initial_rebuilds = engine.rebuild_count
+
+    # 同分辨率应复用缓冲区
+    engine.handle_frame(base_frame.copy(), timestamp=0.1)
+    assert engine.rebuild_count == initial_rebuilds
+
+    # 分辨率变化触发重新分配
+    resized_frame = np.zeros((24, 24, 3), dtype=np.uint8)
+    engine.handle_frame(resized_frame, timestamp=0.2)
+    assert engine.rebuild_count > initial_rebuilds
+
+    engine.stop()
+
+
+def test_sunshine_soak_test_short_run():
+    """缩短时长运行 Sunshine soak test 验证指标采集逻辑。"""
+
+    metrics = run_sunshine_soak_test(
+        duration_seconds=1,
+        frame_interval=0.05,
+        sample_interval=0.1,
+        frame_factory=lambda _i: np.zeros((16, 16, 3), dtype=np.uint8),
+    )
+
+    assert metrics, "应至少采样一组指标"
+    assert all(sample.timestamp > 0 for sample in metrics)
 
 def main():
     """主测试函数"""

@@ -4,6 +4,7 @@
 """
 from flask import Blueprint, jsonify, send_from_directory, request , redirect
 from app.api.controllers import LogController, WebhookController, StreamController, SystemInfoController
+from app.streaming.preview import PreviewManager
 import os
 
 # 创建蓝图
@@ -13,19 +14,21 @@ api_bp = Blueprint('api', __name__)
 log_controller = None
 webhook_controller = None
 stream_controller = None
+preview_manager: PreviewManager | None = None
 
 
-def init_controllers(log_dir: str):
+def init_controllers(log_dir: str, preview_mode: str | None = None):
     """
     初始化控制器
     
     Args:
         log_dir: 日志目录路径
     """
-    global log_controller, webhook_controller, stream_controller
+    global log_controller, webhook_controller, stream_controller, preview_manager
     log_controller = LogController(log_dir)
     webhook_controller = WebhookController(log_dir)
     # stream_controller将在首次请求时动态创建
+    preview_manager = PreviewManager(preview_mode)
 
 
 
@@ -196,9 +199,10 @@ def video_stream():
             # 如果当前有推流在进行，先停止
             if stream_controller and stream_controller.is_streaming:
                 stream_controller.stop_stream()
-            
+
             # 重新初始化推流控制器
-            stream_controller = StreamController(target_app)
+            preview_engine = preview_manager.create_engine(target_app) if preview_manager else None
+            stream_controller = StreamController(target_app, preview_engine=preview_engine)
         
         return stream_controller.start_stream()
         
