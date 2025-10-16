@@ -7,7 +7,13 @@ import threading
 
 from flask import Blueprint, jsonify, send_from_directory, request , redirect
 
-from app.api.controllers import LogController, WebhookController, StreamController, SystemInfoController
+from app.api.controllers import (
+    LogController,
+    WebhookController,
+    StreamController,
+    SystemInfoController,
+    PreviewModeError,
+)
 
 # 创建蓝图
 api_bp = Blueprint('api', __name__)
@@ -36,14 +42,34 @@ class StreamControllerManager:
             return
         self._controllers: dict[str, StreamController] = {}
         self._lock = threading.Lock()
+        self._preview_mode = "none"
         self._initialized = True
+
+    def set_preview_mode(self, mode: str) -> None:
+        with self._lock:
+            if mode == self._preview_mode:
+                return
+            self._preview_mode = mode
+            controllers = list(self._controllers.values())
+        for controller in controllers:
+            try:
+                controller.stop_stream()
+                controller.preview_mode = mode
+            except Exception:
+                pass
+
+    def get_preview_mode(self) -> str:
+        with self._lock:
+            return self._preview_mode
 
     def get_controller(self, target_app: str) -> StreamController:
         with self._lock:
             controller = self._controllers.get(target_app)
             if controller is None:
-                controller = StreamController(target_app)
+                controller = StreamController(target_app, preview_mode=self._preview_mode)
                 self._controllers[target_app] = controller
+            else:
+                controller.preview_mode = self._preview_mode
             return controller
 
     def stop_controller(self, target_app: str) -> bool:
@@ -99,9 +125,10 @@ def reset_controllers() -> None:
     webhook_controller = None
     stream_controller = None
     stream_manager.cleanup_all()
+    stream_manager.set_preview_mode("none")
 
 
-def init_controllers(log_dir: str):
+def init_controllers(log_dir: str, preview_mode: str = "none"):
     """
     初始化控制器
     
@@ -112,6 +139,7 @@ def init_controllers(log_dir: str):
     log_controller = LogController(log_dir)
     webhook_controller = WebhookController(log_dir)
     # stream_controller将在首次请求时动态创建
+    stream_manager.set_preview_mode(preview_mode)
 
 
 
@@ -277,17 +305,33 @@ def video_stream():
         }), 400
     
     try:
-        # 检查是否需要重新初始化stream_controller
-        if not stream_controller or stream_controller.target_app != target_app:
-            # 如果当前有推流在进行，先停止
-            if stream_controller and stream_controller.is_streaming:
-                stream_controller.stop_stream()
-            
-            # 重新初始化推流控制器
-            stream_controller = StreamController(target_app)
-        
-        return stream_controller.start_stream()
-        
+        preview_mode = stream_manager.get_preview_mode()
+        if preview_mode == "none":
+            return jsonify({
+                'error': '实时预览已关闭',
+                'message': '使用 --preview-mode 启用需要的推流方案',
+                'preview_mode': preview_mode,
+            }), 503
+
+        if preview_mode == "sunshine":
+            return jsonify({
+                'error': 'Sunshine 模式不提供浏览器内预览',
+                'message': '请通过 Sunshine 客户端或同网段监看工具连接',
+                'preview_mode': preview_mode,
+            }), 503
+
+        controller = stream_manager.get_controller(target_app)
+
+        # 更新全局引用，保持现有接口兼容
+        stream_controller = controller
+
+        return controller.start_stream()
+
+    except PreviewModeError as exc:
+        return jsonify({
+            'error': str(exc),
+            'preview_mode': exc.preview_mode,
+        }), 503
     except Exception as e:
         return jsonify({
             'error': f'启动视频流时发生错误: {str(e)}'
@@ -303,10 +347,14 @@ def get_stream_info():
         Response: 包含推流状态信息的JSON响应
     """
     if not stream_controller:
-        return jsonify({'error': '推流控制器未初始化'}), 500
-    
+        return jsonify({
+            'error': '推流控制器未初始化',
+            'preview_mode': stream_manager.get_preview_mode(),
+        }), 500
+
     try:
         result = stream_controller.get_stream_info()
+        result['preview_mode'] = stream_manager.get_preview_mode()
         return jsonify(result)
     except Exception as e:
         return jsonify({

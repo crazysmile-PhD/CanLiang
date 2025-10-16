@@ -24,7 +24,7 @@ class TestAPI(unittest.TestCase):
         
         # 模拟初始化控制器
         with patch('app.api.views.LogController') as mock_controller:
-            init_controllers('/fake/log/dir')
+            init_controllers('/fake/log/dir', preview_mode='none')
     
     def test_serve_index(self):
         """
@@ -75,12 +75,55 @@ class TestAPI(unittest.TestCase):
         app = create_app()
         app.config['TESTING'] = True
         client = app.test_client()
-        
+
         response = client.get('/api/LogList')
         self.assertEqual(response.status_code, 500)
-        
+
         data = json.loads(response.data)
         self.assertIn('error', data)
+
+    @patch('app.api.views.stream_manager')
+    def test_init_controllers_configures_preview_mode(self, mock_manager):
+        with patch('app.api.views.LogController'), patch('app.api.views.WebhookController'):
+            init_controllers('/fake/log/dir', preview_mode='web-rtc')
+
+        mock_manager.set_preview_mode.assert_called_once_with('web-rtc')
+
+    @patch('app.api.views.stream_manager')
+    def test_video_stream_blocked_when_preview_disabled(self, mock_manager):
+        mock_manager.get_preview_mode.return_value = 'none'
+
+        response = self.client.get('/api/stream?app=yuanshen.exe')
+
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.data)
+        self.assertEqual(data['preview_mode'], 'none')
+        self.assertIn('实时预览已关闭', data['error'])
+
+    @patch('app.api.views.stream_manager')
+    def test_video_stream_returns_sunshine_message(self, mock_manager):
+        mock_manager.get_preview_mode.return_value = 'sunshine'
+
+        response = self.client.get('/api/stream?app=yuanshen.exe')
+
+        self.assertEqual(response.status_code, 503)
+        data = json.loads(response.data)
+        self.assertEqual(data['preview_mode'], 'sunshine')
+        self.assertIn('Sunshine 模式不提供浏览器内预览', data['error'])
+
+    @patch('app.api.views.stream_manager')
+    def test_video_stream_uses_manager_when_preview_enabled(self, mock_manager):
+        mock_controller = MagicMock()
+        mock_manager.get_preview_mode.return_value = 'web-rtc'
+        mock_manager.get_controller.return_value = mock_controller
+        mock_controller.start_stream.return_value = 'stream-response'
+
+        response = self.client.get('/api/stream?app=yuanshen.exe')
+
+        self.assertEqual(response.status_code, 200)
+        mock_manager.get_controller.assert_called_once_with('yuanshen.exe')
+        mock_controller.start_stream.assert_called_once_with()
+        self.assertEqual(response.data, b'stream-response')
 
 
 if __name__ == '__main__':

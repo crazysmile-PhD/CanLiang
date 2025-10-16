@@ -9,6 +9,7 @@ verified.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from app.api import controllers as controllers_module
 
@@ -193,3 +194,21 @@ def test_stream_controller_falls_back_to_blank_frame(monkeypatch):
     assert frame.shape == (480, 640, 3)
     assert isinstance(frame, np.ndarray)
     assert frame.sum() == 0
+
+
+def test_stream_controller_rejects_disabled_preview():
+    controller = controllers_module.StreamController(preview_mode='none')
+
+    with pytest.raises(controllers_module.PreviewModeError) as exc:
+        controller.start_stream()
+
+    assert exc.value.preview_mode == 'none'
+
+
+def test_stream_controller_rejects_sunshine_preview():
+    controller = controllers_module.StreamController(preview_mode='sunshine')
+
+    with pytest.raises(controllers_module.PreviewModeError) as exc:
+        controller.start_stream()
+
+    assert exc.value.preview_mode == 'sunshine'

@@ -100,6 +100,14 @@ def _desktop_hwnd() -> int | None:
 logger = logging.getLogger(__name__)
 
 
+class PreviewModeError(RuntimeError):
+    """Raised when the requested preview mode does not support browser streaming."""
+
+    def __init__(self, message: str, *, preview_mode: str):
+        super().__init__(message)
+        self.preview_mode = preview_mode
+
+
 class LogController:
     """
     日志控制器
@@ -252,7 +260,7 @@ class StreamController:
     处理屏幕捕获和实时推流功能
     """
     
-    def __init__(self, target_app: str = "yuanshen.exe"):
+    def __init__(self, target_app: str = "yuanshen.exe", preview_mode: str = "none"):
         """
         初始化推流控制器
 
@@ -260,6 +268,7 @@ class StreamController:
             target_app: 目标应用程序名称，默认为yuanshen.exe
         """
         self.target_app = target_app
+        self.preview_mode = preview_mode
         self.is_streaming = False
         self.hwnd = None
         self._gpu_available = False
@@ -270,6 +279,29 @@ class StreamController:
             except Exception:
                 self._gpu_available = False
         
+    def _ensure_preview_available(self) -> None:
+        """Validate that the current preview mode supports MJPEG streaming."""
+
+        allowed = {"web-rtc", "ll-hls"}
+
+        if self.preview_mode == "none":
+            raise PreviewModeError(
+                "实时预览已被禁用，请使用 --preview-mode 启用。",
+                preview_mode=self.preview_mode,
+            )
+
+        if self.preview_mode == "sunshine":
+            raise PreviewModeError(
+                "Sunshine 模式仅支持 Sunshine 客户端，不提供浏览器内预览。",
+                preview_mode=self.preview_mode,
+            )
+
+        if self.preview_mode not in allowed:
+            raise PreviewModeError(
+                f"不支持的预览模式: {self.preview_mode}",
+                preview_mode=self.preview_mode,
+            )
+
     def find_window_by_process_name(self, process_name: str) -> int:
         """
         根据进程名查找窗口句柄
@@ -614,6 +646,14 @@ class StreamController:
             bytes: MJPEG格式的视频帧
         """
         try:
+            self._ensure_preview_available()
+
+            if self.preview_mode in {"web-rtc", "ll-hls"}:
+                logger.info(
+                    "预览模式 %s 尚未实现专用管线，使用 MJPEG 回退。",
+                    self.preview_mode,
+                )
+
             if cv2 is None:
                 raise RuntimeError("OpenCV不可用，无法进行视频推流")
 
@@ -715,10 +755,11 @@ class StreamController:
     def start_stream(self) -> Response:
         """
         启动视频流
-        
+
         Returns:
             Response: Flask Response对象，包含MJPEG视频流
         """
+        self._ensure_preview_available()
         return Response(
             self.generate_frames(),
             mimetype='multipart/x-mixed-replace; boundary=frame'
@@ -745,7 +786,8 @@ class StreamController:
             'window_found': bool(
                 self.hwnd and desktop is not None and self.hwnd != desktop
             ),
-            'hwnd': self.hwnd
+            'hwnd': self.hwnd,
+            'preview_mode': self.preview_mode,
         }
     
     def get_available_programs(self) -> List[str]:

@@ -45,13 +45,22 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser(description='参量质变仪，用于解析BetterGI日志。')
     parser.add_argument('-bgi', '--bgi_path', default=None, help='BetterGI程序路径')
-    parser.add_argument('-env', '--environment', default='production', 
+    parser.add_argument('-env', '--environment', default='production',
                        choices=['development', 'production', 'testing'],
                        help='运行环境 (development/production/testing)，默认为production')
-    parser.add_argument('-ssl', '--ssl_cert', default=None, 
+    parser.add_argument('-ssl', '--ssl_cert', default=None,
                        help='SSL证书文件路径，格式为"cert.pem,key.pem"或单个.pem文件路径')
-    # parser.add_argument('-no', '--do_not_open_website', action='store_true', 
-    #                    help='默认启动时打开网页，传递此参数以禁用')
+    parser.add_argument(
+        '--preview-mode',
+        default='none',
+        choices=['none', 'web-rtc', 'll-hls', 'sunshine'],
+        help='实时预览方案，默认关闭。',
+    )
+    parser.add_argument(
+        '--open-browser',
+        action='store_true',
+        help='启动后自动打开浏览器（默认关闭，以减少额外内存占用）',
+    )
     return parser.parse_args()
 
 
@@ -155,11 +164,22 @@ def main():
         port = config_instance.PORT
         
         # 初始化控制器（不再需要target_app参数）
-        init_controllers(bgi_log_dir)
-        
-        # 如果不禁用，则启动浏览器
-        # if not args.do_not_open_website:
-        #     open_browser_after_start(port)
+        init_controllers(bgi_log_dir, preview_mode=args.preview_mode)
+
+        # 记录预览模式到应用配置，方便后续读取
+        app.config['PREVIEW_MODE'] = args.preview_mode
+
+        if args.open_browser:
+            if args.preview_mode == 'none':
+                logger.warning(
+                    '检测到 --open-browser 但预览模式为 none，浏览器将显示占位页面。'
+                )
+            else:
+                logger.info(
+                    "根据 --open-browser 参数，启动浏览器预览 (模式: %s)",
+                    args.preview_mode,
+                )
+            open_browser_after_start(port)
         
         # 启动Flask应用
         logger.info(f"启动Flask应用，环境: {args.environment}，端口: {port}")
