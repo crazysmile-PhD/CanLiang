@@ -11,6 +11,7 @@ import win32gui
 from flask import Response
 
 from .capture import FrameCapture
+from .preview import BasePreviewEngine
 from .programs import ProgramLister
 from .window_finder import WindowFinder
 
@@ -29,6 +30,7 @@ class StreamController:
         finder: Optional[WindowFinder] = None,
         capture: Optional[FrameCapture] = None,
         encoder: FrameEncoder = cv2.imencode,
+        preview_engine: Optional[BasePreviewEngine] = None,
         response_class: type[Response] = Response,
         sleeper: Callable[[float], None] = time.sleep,
         program_lister: Optional[ProgramLister] = None,
@@ -44,6 +46,7 @@ class StreamController:
         self._sleep = sleeper
         self._programs = program_lister or ProgramLister(self._finder)
         self._desktop_window = desktop_window
+        self._preview = preview_engine
 
     # streaming ---------------------------------------------------------------
 
@@ -71,6 +74,9 @@ class StreamController:
                     else:
                         frame = self._capture.capture(self.hwnd, None if self.target_app == "桌面.exe" else self.target_app)
 
+                    if self._preview:
+                        self._preview.handle_frame(frame)
+
                     ret, buffer = self._encoder(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
                     if ret:
                         frame_bytes = buffer.tobytes()
@@ -90,6 +96,8 @@ class StreamController:
             if self.is_streaming:
                 self.is_streaming = False
                 logger.info("推流已停止 - 目标应用: %s", self.target_app)
+            if self._preview:
+                self._preview.stop()
 
     def start_stream(self) -> Response:
         return self._response_class(
@@ -99,6 +107,8 @@ class StreamController:
     def stop_stream(self) -> None:
         self.is_streaming = False
         logger.info("视频流已停止")
+        if self._preview:
+            self._preview.stop()
 
     def get_stream_info(self):
         return {
@@ -125,6 +135,9 @@ class StreamController:
         while self.is_streaming:
             try:
                 frame = self._capture.blank_frame()
+                if self._preview:
+                    self._preview.handle_frame(frame)
+
                 ret, buffer = self._encoder(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 if ret:
                     frame_bytes = buffer.tobytes()
