@@ -58,6 +58,11 @@ Webhook通知设置：在BGI的`通知-启用Webhook-Webhook端点`填写`http:/
 
 例如：`Canliang.exe -bgi "C:\Program Files (x86)\Genshin Impact"`
 
+### Sunshine 推流兼容性说明
+
+- Sunshine 采用 NVENC/HEVC 这种封闭编码格式，浏览器无法直接解码。
+- 因此建议将 Sunshine 用于「本地 / 同网段低延迟监看」场景，而不是跨网段的网页端实时预览。
+- 如果需要在浏览器端进行实时画面预览，更合适的方案是改用 **WebRTC (H.264/VP9)** 或 **LL-HLS (MSE)** 等流媒体技术。
 
 ## 项目结构
 
